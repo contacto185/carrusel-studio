@@ -1,0 +1,18 @@
+{
+  "comment": "Calendario de ideas de temas para la generación automática diaria. El scheduler toma 'per_day' temas por día, rotando la lista.",
+  "per_day": 1,
+  "slides": 6,
+  "tone": "motivador y cercano",
+  "topics": [
+    "Desinflamación: hábitos simples para bajar la inflamación",
+    "Movimiento consciente para empezar el día",
+    "Salud digestiva y energía",
+    "Rutina de movilidad para la espalda",
+    "Descanso y recuperación: dormir mejor",
+    "Alimentación antiinflamatoria sin complicarte",
+    "Respiración y manejo del estrés",
+    "Hidratación y bienestar",
+    "Postura y trabajo de escritorio",
+    "Constancia: cómo sostener el hábito"
+  ]
+}
