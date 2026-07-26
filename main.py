@@ -24,7 +24,9 @@ from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from pathlib import Path as _Path
 
 import lovart_client
 import ghl_client
@@ -96,6 +98,15 @@ class ConfirmReq(BaseModel):
 @app.get("/health")
 def health():
     return {"ok": True, "service": "carrusel-studio-backend"}
+
+
+@app.get("/")
+def root():
+    """Sirve la app (index.html) desde el mismo backend, para entrar por link sin abrir archivos."""
+    idx = _Path(__file__).parent / "index.html"
+    if idx.exists():
+        return FileResponse(str(idx))
+    return {"ok": True, "service": "carrusel-studio-backend", "app": "index.html no encontrado"}
 
 
 @app.get("/api/ghl/accounts")

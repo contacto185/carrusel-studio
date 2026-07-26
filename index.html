@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carrusel Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--gold:#f0c84e;--gold-dim:#a8892e;--glow:rgba(240,200,78,.13);
+--s1:#111;--s2:#181818;--s3:#1e1e1e;--border:rgba(240,200,78,.13);--text:#e8e0cc;--muted:#6b6355;--red:#ff6060;--green:#6ee7a8;--r:11px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;}
+a{color:var(--gold);}
+nav{display:flex;align-items:center;gap:4px;padding:0 24px;border-bottom:1px solid var(--border);height:56px;position:sticky;top:0;background:rgba(10,10,10,.96);backdrop-filter:blur(12px);z-index:100;}
+.logo{font-family:'Playfair Display',serif;color:var(--gold);font-size:16px;letter-spacing:.05em;margin-right:24px;display:flex;align-items:center;gap:9px;}
+.logo .mk{width:26px;height:26px;border:1.5px solid var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;}
+.tab{padding:0 18px;height:56px;display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;font-family:inherit;transition:.2s;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.tab .badge{background:var(--gold);color:#000;border-radius:9px;font-size:10px;font-weight:700;padding:1px 7px;letter-spacing:0;}
+.spacer{flex:1;}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 11px;font-size:11px;cursor:pointer;font-family:inherit;transition:.2s;}
+.icon-btn:hover{border-color:var(--gold-dim);color:var(--gold);}
+.page{display:none;padding:26px 30px;max-width:1200px;margin:0 auto;}
+.page.active{display:block;}
+h2{font-family:'Playfair Display',serif;font-weight:400;color:var(--gold);font-size:20px;margin-bottom:4px;}
+.sub{font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.5;}
+label{font-size:11px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.04em;}
+input,textarea,select{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:inherit;font-size:13px;padding:10px 12px;outline:none;width:100%;transition:.2s;}
+input:focus,textarea:focus,select:focus{border-color:var(--gold-dim);box-shadow:0 0 0 3px var(--glow);}
+textarea{resize:vertical;min-height:90px;line-height:1.5;}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.col{flex:1;min-width:150px;}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin:6px 0 2px;}
+.chip{border:1px solid var(--border);background:var(--s1);color:var(--muted);border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;transition:.2s;}
+.chip:hover{border-color:var(--gold-dim);color:var(--gold);}
+.btn{background:var(--gold);color:#000;border:none;border-radius:var(--r);padding:11px 20px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;font-family:inherit;transition:.2s;}
+.btn:hover{background:#f5d470;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-ghost{background:transparent;border:1px solid var(--gold-dim);color:var(--gold);}
+.btn-ghost:hover{background:var(--glow);}
+.btn-no{background:transparent;border:1px solid rgba(255,96,96,.4);color:var(--red);}
+.btn-no:hover{background:rgba(255,96,96,.08);}
+.btn-sm{padding:7px 13px;font-size:11px;}
+.log{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-size:12px;color:var(--muted);margin-top:16px;max-height:220px;overflow-y:auto;line-height:1.7;white-space:pre-wrap;display:none;}
+.log.show{display:block;}
+.empty{opacity:.4;text-align:center;padding:70px 20px;font-family:'Playfair Display',serif;font-style:italic;font-size:15px;}
+/* carousel card */
+.card{border:1px solid var(--border);border-radius:14px;background:var(--s1);margin-bottom:18px;overflow:hidden;}
+.card-head{padding:14px 16px;display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--border);}
+.card-head .t{flex:1;}
+.card-head .hook{font-family:'Playfair Display',serif;font-size:15px;color:var(--text);line-height:1.35;}
+.card-head .topic{font-size:10px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:.1em;margin-top:3px;}
+.strip{display:flex;gap:10px;overflow-x:auto;padding:14px 16px;}
+.slide{flex:0 0 160px;width:160px;}
+.slide .frame{position:relative;width:160px;height:200px;border-radius:9px;overflow:hidden;background:var(--s3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
+.slide .frame img{width:100%;height:100%;object-fit:cover;}
+.slide .num{position:absolute;top:6px;left:6px;background:rgba(10,10,10,.85);border:1px solid var(--gold);color:var(--gold);font-size:9px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.slide .ov{position:absolute;left:0;right:0;bottom:0;padding:20px 8px 8px;background:linear-gradient(transparent,rgba(0,0,0,.85));font-size:10px;text-align:center;line-height:1.3;}
+.slide .cap{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.3;}
+.slide .regen{width:100%;margin-top:5px;font-size:9px;padding:4px;}
+.mini-spin{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.card-foot{padding:12px 16px;display:flex;gap:10px;align-items:center;border-top:1px solid var(--border);flex-wrap:wrap;}
+.card-foot .caption{flex:1;min-width:200px;font-size:12px;color:var(--muted);line-height:1.5;max-height:60px;overflow:hidden;}
+.acct-box{padding:12px 16px;border-top:1px solid var(--border);}
+.acct-quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.acct-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:7px;}
+.acct{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;background:var(--s2);font-size:12px;transition:.15s;}
+.acct:hover{border-color:var(--gold-dim);}
+.acct.on{border-color:var(--gold);background:var(--glow);}
+.acct .pf{font-size:9px;color:var(--gold-dim);text-transform:uppercase;letter-spacing:.06em;}
+.acct input{width:auto;}
+.status{font-size:12px;margin-top:8px;}
+.status.ok{color:var(--green);}
+.status.err{color:var(--red);}
+/* modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:500;align-items:center;justify-content:center;padding:20px;}
+.modal-bg.show{display:flex;}
+.modal{background:var(--s1);border:1px solid var(--border);border-radius:14px;max-width:440px;width:100%;padding:24px;}
+.modal h3{font-family:'Playfair Display',serif;color:var(--gold);font-weight:400;font-size:17px;margin-bottom:6px;}
+.modal p{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;}
+.modal .field{margin-bottom:13px;}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 16px;font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,.5);transform:translateY(16px);opacity:0;transition:.3s;z-index:1000;max-width:300px;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.ok{border-color:rgba(110,231,168,.4);color:var(--green);}
+.toast.err{border-color:rgba(255,96,96,.4);color:var(--red);}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo"><span class="mk">✦</span> Carrusel Studio</div>
+  <button class="tab active" data-page="gen">Generar</button>
+  <button class="tab" data-page="rev">Revisar <span class="badge" id="revBadge">0</span></button>
+  <button class="tab" data-page="app">Aprobados <span class="badge" id="appBadge">0</span></button>
+  <button class="tab" data-page="brand">Estilo &amp; Ref</button>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="cfgBtn">⚙ Config</button>
+</nav>
+
+<!-- GENERAR -->
+<section class="page active" id="page-gen">
+  <h2>Generar carruseles</h2>
+  <p class="sub">Escribe uno o varios temas (uno por línea). Para cada tema creo el copy con Claude y las imágenes con Lovart. Después los revisas y apruebas.</p>
+  <div class="row">
+    <div class="col" style="flex:2;min-width:280px;">
+      <label>Temas (uno por línea)</label>
+      <textarea id="topics" placeholder="Desinflamación: hábitos simples para bajar la inflamación&#10;Movimiento consciente para empezar el día&#10;Salud digestiva y energía"></textarea>
+      <div class="chips" id="suggested"></div>
+    </div>
+    <div class="col">
+      <label>Slides por carrusel</label>
+      <input type="number" id="slides" value="5" min="3" max="10">
+      <label style="margin-top:12px;">Tono</label>
+      <input type="text" id="tone" value="motivador y cercano">
+      <label style="margin-top:12px;">Modelo de imagen</label>
+      <select id="model">
+        <option value="generate_image_seedream_v5_pro">Seedream 5 Pro</option>
+        <option value="generate_image_nano_banana_pro">Nano Banana Pro</option>
+        <option value="generate_image_gpt_image_2">GPT Image 2</option>
+        <option value="generate_image_seedream_v4_5">Seedream 4.5</option>
+      </select>
+    </div>
+  </div>
+  <button class="btn" id="genBtn">Generar lote</button>
+  <div class="log" id="genLog"></div>
+</section>
+
+<!-- REVISAR -->
+<section class="page" id="page-rev">
+  <h2>Revisar y aprobar</h2>
+  <p class="sub">Marca <b>Sí</b> los carruseles que te gustan (pasan a “Aprobados”) o <b>No</b> para descartarlos. Puedes regenerar una imagen que no te convenza.</p>
+  <div id="revList"></div>
+  <div class="empty" id="revEmpty">Aún no hay carruseles generados.</div>
+</section>
+
+<!-- APROBADOS -->
+<section class="page" id="page-app">
+  <h2>Aprobados — enviar a GoHighLevel</h2>
+  <p class="sub">Ajusta el copy si quieres, elige en qué cuentas, y envíalo como <b>borrador</b> al Social Planner de Flowback Fitness.</p>
+  <div id="appList"></div>
+  <div class="empty" id="appEmpty">Todavía no apruebas ningún carrusel.</div>
+</section>
+
+<!-- ESTILO & REFERENCIAS -->
+<section class="page" id="page-brand">
+  <h2>Estilo &amp; Referencias</h2>
+  <p class="sub">Aquí el sistema aprende <b>tu</b> línea. El perfil de marca se usa en cada carrusel (copy e imágenes) para que no salga cualquier cosa. Y puedes recrear un carrusel que te gustó, a tu estilo.</p>
+
+  <div class="card" style="padding:16px;">
+    <label>Perfil de marca “Estilo Jimmy” (editable)</label>
+    <textarea id="brandText" style="min-height:280px;font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;">
+      <button class="btn btn-sm" id="brandSave">Guardar estilo</button>
+      <span class="status" id="brandStatus" style="align-self:center;"></span>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:16px;">Recrear desde un link</h2>
+    <p class="sub" style="margin-bottom:14px;">Pega un carrusel de Instagram que te gustó. Lo recreo con tu estilo (no lo copio: tomo el ángulo y lo hago tuyo). Consejo: pega también el texto de los slides para que quede más fiel.</p>
+    <div class="row">
+      <div class="col" style="flex:2;min-width:260px;">
+        <label>Link del carrusel (Instagram u otro)</label>
+        <input type="text" id="recUrl" placeholder="https://www.instagram.com/p/...">
+        <label style="margin-top:10px;">¿Qué te gusta de él? (ángulo, formato, idea)</label>
+        <input type="text" id="recNotes" placeholder="Ej: el ranking de alimentos por proteína, formato infografía">
+        <label style="margin-top:10px;">Texto de los slides (opcional, pégalo para mayor fidelidad)</label>
+        <textarea id="recText" placeholder="Slide 1: ...&#10;Slide 2: ..."></textarea>
+      </div>
+      <div class="col">
+        <label>Tema (opcional)</label>
+        <input type="text" id="recTopic" placeholder="se deduce de tus notas">
+        <label style="margin-top:10px;">Slides</label>
+        <input type="number" id="recSlides" value="5" min="3" max="10">
+        <label style="margin-top:10px;">Guardar como referencia</label>
+        <button class="btn btn-ghost btn-sm" id="refSave" style="width:100%;">＋ Guardar en mis referencias</button>
+      </div>
+    </div>
+    <button class="btn" id="recBtn">Recrear en mi estilo</button>
+    <div class="log" id="recLog"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <label>Mis referencias guardadas (swipe file)</label>
+    <div id="refList" style="margin-top:8px;"></div>
+  </div>
+</section>
+
+<!-- CONFIG MODAL -->
+<div class="modal-bg" id="cfgModal">
+  <div class="modal">
+    <h3>Configuración</h3>
+    <p>Conexión con tu backend. Se guarda solo en este navegador.</p>
+    <div class="field"><label>URL del backend</label><input type="text" id="cfgUrl" placeholder="https://tu-backend.onrender.com"></div>
+    <div class="field"><label>Clave de acceso (APP_ACCESS_KEY)</label><input type="password" id="cfgKey" placeholder="tu clave"></div>
+    <div class="row" style="margin:0;">
+      <button class="btn btn-ghost btn-sm" id="cfgTest">Probar conexión</button>
+      <button class="btn btn-sm" id="cfgSave">Guardar</button>
+    </div>
+    <div class="status" id="cfgStatus"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUGGESTED = ["Desinflamación: hábitos para bajar la inflamación","Movimiento consciente para empezar el día","Salud digestiva y energía","Rutina de movilidad para la espalda","Descanso y recuperación: dormir mejor","Alimentación antiinflamatoria sin complicarte","Respiración y manejo del estrés","Postura y trabajo de escritorio"];
+const cfg = { url: localStorage.getItem('cs_url')||'https://carrusel-studio.onrender.com', key: localStorage.getItem('cs_key')||'carrusel-flowback-2026' };
+let accounts = [];       // [{id,name,platform}]
+let carousels = [];      // {id,topic,hook,caption,hashtags,slides:[{title,body,brief,image_url,loading,error}],decision,accounts:Set,sending,result}
+let idSeq = 1;
+
+const $ = s => document.querySelector(s);
+const toast = (m,t='') => { const el=$('#toast'); el.textContent=m; el.className='toast show '+t; setTimeout(()=>el.className='toast',3200); };
+
+// ---- API ----
+async function api(path, opts={}) {
+  if(!cfg.url) throw new Error('Configura la URL del backend (⚙ Config).');
+  const r = await fetch(cfg.url.replace(/\/$/,'')+path, {
+    ...opts,
+    headers: {'Content-Type':'application/json','X-App-Key':cfg.key, ...(opts.headers||{})}
+  });
+  const txt = await r.text();
+  let data; try{ data = txt?JSON.parse(txt):{}; }catch(e){ data={detail:txt}; }
+  if(!r.ok) throw new Error(data.detail||('HTTP '+r.status));
+  return data;
+}
+
+// ---- navegación ----
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active'); $('#page-'+t.dataset.page).classList.add('active');
+  if(t.dataset.page==='app') ensureAccounts();
+  if(t.dataset.page==='brand'){ if(!$('#brandText').value) loadBrand(); loadRefs(); }
+});
+
+// ---- config ----
+$('#cfgBtn').onclick=()=>{ $('#cfgUrl').value=cfg.url; $('#cfgKey').value=cfg.key; $('#cfgStatus').textContent=''; $('#cfgModal').classList.add('show'); };
+$('#cfgModal').onclick=e=>{ if(e.target.id==='cfgModal') $('#cfgModal').classList.remove('show'); };
+$('#cfgSave').onclick=()=>{ cfg.url=$('#cfgUrl').value.trim(); cfg.key=$('#cfgKey').value.trim(); localStorage.setItem('cs_url',cfg.url); localStorage.setItem('cs_key',cfg.key); $('#cfgModal').classList.remove('show'); toast('Configuración guardada','ok'); };
+$('#cfgTest').onclick=async()=>{ const s=$('#cfgStatus'); s.className='status'; s.textContent='Probando...'; cfg.url=$('#cfgUrl').value.trim(); cfg.key=$('#cfgKey').value.trim(); try{ const a=await api('/api/ghl/accounts'); s.className='status ok'; s.textContent='✓ Conectado. '+(a.accounts?.length||0)+' cuentas de GHL detectadas.'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
+
+// ---- sugerencias ----
+const sug=$('#suggested'); SUGGESTED.forEach(t=>{ const c=document.createElement('div'); c.className='chip'; c.textContent='+ '+t; c.onclick=()=>{ const ta=$('#topics'); ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+t; }; sug.appendChild(c); });
+
+// ---- generación ----
+const glog=$('#genLog');
+function logln(m){ glog.classList.add('show'); glog.textContent+=m+'\n'; glog.scrollTop=glog.scrollHeight; }
+
+// Construye UN carrusel (copy + imágenes). Reutilizado por Generar y Recrear.
+async function buildOne(topic, slides, tone, model, reference, log){
+  log&&log('  · escribiendo copy...');
+  const copy=await api('/api/copy',{method:'POST',body:JSON.stringify({topic,slides,tone,reference:reference||''})});
+  const briefs=copy.image_briefs||[];
+  const car={ id:idSeq++, topic:copy.topic||topic, hook:copy.hook||topic, caption:copy.caption||'', hashtags:copy.hashtags||[],
+    slides:(copy.slides||[]).map((s,i)=>({title:s.title||'',body:s.body||'',brief:briefs[i]||s.title||topic,image_url:null,loading:true,error:null})),
+    decision:'pending', accounts:new Set(), sending:false, result:null };
+  carousels.unshift(car); renderRev();
+  log&&log('  · generando '+car.slides.length+' imágenes con Lovart...');
+  await Promise.all(car.slides.map(sl=>genSlide(car,sl,model)));
+  log&&log('  ✓ listo');
+  return car;
+}
+
+$('#genBtn').onclick=async()=>{
+  const topics=$('#topics').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!topics.length){ toast('Escribe al menos un tema','err'); return; }
+  if(!cfg.url){ toast('Configura el backend primero (⚙)','err'); $('#cfgBtn').click(); return; }
+  const slides=+$('#slides').value||5, tone=$('#tone').value, model=$('#model').value;
+  $('#genBtn').disabled=true; glog.textContent='';
+  for(const topic of topics){
+    logln('▸ '+topic);
+    try{ await buildOne(topic,slides,tone,model,'',logln); }
+    catch(e){ logln('  ✗ error: '+e.message); toast('Error en "'+topic+'": '+e.message,'err'); }
+  }
+  $('#genBtn').disabled=false;
+  toast('Lote generado. Revisa en la pestaña “Revisar”.','ok');
+  document.querySelector('.tab[data-page=rev]').click();
+};
+
+// ---- Estilo & Referencias ----
+const rlog=$('#recLog'); const reclogln=m=>{ rlog.classList.add('show'); rlog.textContent+=m+'\n'; rlog.scrollTop=rlog.scrollHeight; };
+async function loadBrand(){ try{ const d=await api('/api/brand'); $('#brandText').value=d.brand||''; }catch(e){ toast('No pude cargar el estilo: '+e.message,'err'); } }
+$('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='status'; s.textContent='Guardando...'; try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:$('#brandText').value})}); s.className='status ok'; s.textContent='✓ Estilo guardado'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
+async function loadRefs(){ const box=$('#refList'); try{ const d=await api('/api/references'); const refs=d.references||[]; box.innerHTML=refs.length?refs.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;"><div style="flex:1;min-width:0;"><a href="${esc(r.url)}" target="_blank" style="font-size:12px;">${esc(r.url||'(sin link)')}</a><div class="sub" style="margin:2px 0 0;">${esc(r.notes||'')}</div></div><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button><button class="btn btn-ghost btn-sm" data-useref="${r.id}" data-u="${esc(r.url)}" data-n="${esc(r.notes)}" data-t="${esc(r.text||'')}">Usar</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
+    box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=async()=>{ await api('/api/references/'+b.dataset.delref,{method:'DELETE'}); loadRefs(); });
+    box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#recUrl').value=b.dataset.u; $('#recNotes').value=b.dataset.n; $('#recText').value=b.dataset.t; document.querySelector('#page-brand').scrollIntoView(); toast('Referencia cargada abajo. Pulsa “Recrear”.','ok'); });
+  }catch(e){ box.innerHTML='<span class="sub">'+esc(e.message)+'</span>'; } }
+$('#refSave').onclick=async()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } try{ await api('/api/references',{method:'POST',body:JSON.stringify({url,notes,text})}); toast('Referencia guardada','ok'); loadRefs(); }catch(e){ toast(e.message,'err'); } };
+$('#recBtn').onclick=async()=>{
+  const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
+  if(!url&&!notes&&!text){ toast('Pega un link o describe qué te gustó','err'); return; }
+  const topic=$('#recTopic').value.trim()||notes||'Idea inspirada en la referencia';
+  const reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
+  const slides=+$('#recSlides').value||5, model=$('#model').value, tone=$('#tone').value;
+  $('#recBtn').disabled=true; rlog.textContent=''; reclogln('▸ Recreando a tu estilo...');
+  try{ await buildOne(topic,slides,tone,model,reference,reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
+  catch(e){ reclogln('  ✗ '+e.message); toast('Error: '+e.message,'err'); }
+  $('#recBtn').disabled=false;
+};
+
+async function genSlide(car,sl,model){
+  sl.loading=true; sl.error=null; renderRev();
+  try{
+    const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify({prompt:sl.brief,model})});
+    sl.image_url=(r.image_urls&&r.image_urls[0])||null;
+    if(!sl.image_url) sl.error=r.warning||'sin imagen';
+  }catch(e){ sl.error=e.message; }
+  sl.loading=false; renderRev();
+}
+
+// ---- revisar ----
+function renderRev(){
+  const pend=carousels.filter(c=>c.decision==='pending');
+  $('#revBadge').textContent=pend.length;
+  $('#appBadge').textContent=carousels.filter(c=>c.decision==='yes').length;
+  $('#revEmpty').style.display=pend.length?'none':'block';
+  const list=$('#revList'); list.innerHTML='';
+  pend.forEach(car=>{
+    const el=document.createElement('div'); el.className='card';
+    el.innerHTML=`<div class="card-head"><div class="t"><div class="hook">${esc(car.hook)}</div><div class="topic">${esc(car.topic)}</div></div>
+      <button class="btn btn-sm" data-yes="${car.id}">✓ Sí</button>
+      <button class="btn btn-sm btn-no" data-no="${car.id}">✕ No</button></div>
+      <div class="strip">${car.slides.map((s,i)=>slideHtml(car,s,i)).join('')}</div>
+      <div class="card-foot"><div class="caption">${esc(car.caption)}</div></div>`;
+    list.appendChild(el);
+  });
+  list.querySelectorAll('[data-yes]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.yes);c.decision='yes';renderRev();renderApp();toast('Aprobado → pestaña Aprobados','ok');});
+  list.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.no);c.decision='no';renderRev();});
+  list.querySelectorAll('[data-regen]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);genSlide(c,c.slides[+b.dataset.slide],$('#model').value);});
+}
+function slideHtml(car,s,i){
+  let inner;
+  if(s.loading) inner=`<div class="mini-spin"></div>`;
+  else if(s.image_url) inner=`<img src="${s.image_url}"><div class="ov">${esc(s.title)}</div>`;
+  else inner=`<div style="font-size:10px;color:var(--red);padding:8px;text-align:center">${esc(s.error||'sin imagen')}</div>`;
+  return `<div class="slide"><div class="frame"><span class="num">${i+1}</span>${inner}</div>
+    <div class="cap">${esc(s.body||'')}</div>
+    <button class="icon-btn regen" data-regen data-car="${car.id}" data-slide="${i}">↻ Regenerar</button></div>`;
+}
+
+// ---- aprobados ----
+async function ensureAccounts(){
+  if(accounts.length||!cfg.url) { renderApp(); return; }
+  try{ const a=await api('/api/ghl/accounts'); accounts=a.accounts||[]; }catch(e){ toast('No pude cargar cuentas GHL: '+e.message,'err'); }
+  renderApp();
+}
+function renderApp(){
+  const appr=carousels.filter(c=>c.decision==='yes');
+  $('#appBadge').textContent=appr.length;
+  $('#appEmpty').style.display=appr.length?'none':'block';
+  const list=$('#appList'); list.innerHTML='';
+  appr.forEach(car=>{
+    const media=car.slides.filter(s=>s.image_url).length;
+    const el=document.createElement('div'); el.className='card';
+    el.innerHTML=`<div class="card-head"><div class="t"><div class="hook">${esc(car.hook)}</div><div class="topic">${esc(car.topic)} · ${media} imágenes</div></div></div>
+      <div class="strip">${car.slides.map((s,i)=>`<div class="slide"><div class="frame"><span class="num">${i+1}</span>${s.image_url?`<img src="${s.image_url}">`:`<div style="font-size:10px;color:var(--red);padding:8px">sin imagen</div>`}</div></div>`).join('')}</div>
+      <div style="padding:12px 16px;"><label>Copy / caption del post</label><textarea data-cap="${car.id}">${esc(car.caption)}\n\n${car.hashtags.join(' ')}</textarea></div>
+      <div class="acct-box">
+        <label>Cuentas destino</label>
+        <div class="acct-quick">
+          <button class="chip" data-q="all" data-car="${car.id}">Todas</button>
+          <button class="chip" data-q="flowback" data-car="${car.id}">Flowback</button>
+          <button class="chip" data-q="jimmy" data-car="${car.id}">Jimmy</button>
+          <button class="chip" data-q="kira" data-car="${car.id}">Kira</button>
+          <button class="chip" data-q="none" data-car="${car.id}">Ninguna</button>
+        </div>
+        <div class="acct-grid">${accounts.map(a=>`<label class="acct ${car.accounts.has(a.id)?'on':''}" data-acar="${car.id}" data-aid="${a.id}">
+          <input type="checkbox" ${car.accounts.has(a.id)?'checked':''}><span><span class="pf">${esc(a.platform)}</span><br>${esc(a.name)}</span></label>`).join('')||'<span class="sub">Sin cuentas cargadas.</span>'}</div>
+      </div>
+      <div class="card-foot">
+        <button class="btn" data-send="${car.id}" ${car.sending?'disabled':''}>${car.sending?'Enviando...':'Enviar como borrador a GHL'}</button>
+        <button class="btn btn-ghost btn-sm" data-back="${car.id}">↩ Volver a revisar</button>
+        <div class="status ${car.result?.ok?'ok':car.result?'err':''}" style="flex:1">${car.result?(car.result.ok?'✓ Borrador creado en GHL':'✗ '+car.result.msg):''}</div>
+      </div>`;
+    list.appendChild(el);
+  });
+  // handlers
+  list.querySelectorAll('[data-cap]').forEach(t=>t.oninput=()=>{const c=carousels.find(x=>x.id==t.dataset.cap);c._editedCaption=t.value;});
+  list.querySelectorAll('.acct').forEach(l=>l.onclick=e=>{ if(e.target.tagName==='INPUT')return; const c=carousels.find(x=>x.id==l.dataset.acar); const id=l.dataset.aid; if(c.accounts.has(id))c.accounts.delete(id);else c.accounts.add(id); renderApp(); });
+  list.querySelectorAll('.acct input').forEach(inp=>inp.onclick=e=>{ e.stopPropagation(); const l=inp.closest('.acct'); const c=carousels.find(x=>x.id==l.dataset.acar); const id=l.dataset.aid; if(inp.checked)c.accounts.add(id);else c.accounts.delete(id); renderApp(); });
+  list.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{ const c=carousels.find(x=>x.id==b.dataset.car); const q=b.dataset.q;
+    if(q==='none'){c.accounts.clear();}
+    else if(q==='all'){accounts.forEach(a=>c.accounts.add(a.id));}
+    else {accounts.forEach(a=>{ if((a.name||'').toLowerCase().includes(q)) c.accounts.add(a.id); });}
+    renderApp(); });
+  list.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.back);c.decision='pending';c.result=null;renderApp();renderRev();});
+  list.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>sendDraft(carousels.find(x=>x.id==b.dataset.send)));
+}
+
+async function sendDraft(car){
+  const ids=[...car.accounts];
+  if(!ids.length){ toast('Elige al menos una cuenta','err'); return; }
+  const media=car.slides.filter(s=>s.image_url).map(s=>s.image_url);
+  if(!media.length){ toast('Este carrusel no tiene imágenes','err'); return; }
+  const caption=car._editedCaption ?? (car.caption+'\n\n'+car.hashtags.join(' '));
+  car.sending=true; car.result=null; renderApp();
+  try{
+    const r=await api('/api/ghl/draft',{method:'POST',body:JSON.stringify({accountIds:ids,caption,mediaUrls:media})});
+    car.result={ok:true}; toast('✓ Borrador creado en GHL','ok');
+  }catch(e){ car.result={ok:false,msg:e.message}; toast('Error al enviar: '+e.message,'err'); }
+  car.sending=false; renderApp();
+}
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// init
+if(!cfg.url){ setTimeout(()=>$('#cfgBtn').click(),400); }
+renderRev(); renderApp();
+</script>
+</body>
+</html>
