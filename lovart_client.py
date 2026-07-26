@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 # Ruta al cliente oficial de Lovart (vendido dentro del repo).
-AGENT_SKILL = str(Path(__file__).parent / "agent_skill.py")
+AGENT_SKILL = str(Path(__file__).parent / "vendor" / "agent_skill.py")
 
 # Modelo de imagen por defecto. Ver la tabla completa en vendor/LOVART_SKILL.md.
 DEFAULT_IMAGE_MODEL = os.getenv("LOVART_IMAGE_MODEL", "generate_image_seedream_v5_pro")
@@ -94,11 +94,21 @@ def _extract_image_urls(result: dict) -> list[str]:
     return urls
 
 
+def upload_file(local_path: str) -> str:
+    """Sube una imagen local a Lovart y devuelve su URL de CDN (para usar como referencia)."""
+    result = _run(["upload", "--file", local_path], timeout=120)
+    return result.get("url", "")
+
+
 def generate_image(prompt: str, model: str | None = None,
                    project_id: str | None = None,
-                   thread_id: str | None = None) -> dict:
+                   thread_id: str | None = None,
+                   attachments: list[str] | None = None) -> dict:
     """
     Genera una imagen a partir de un prompt.
+
+    attachments: URLs de imágenes de referencia (estilo/sujeto, p.ej. fotos de Jimmy/Kira).
+    thread_id: si se pasa, continúa la conversación para EDITAR la imagen anterior.
 
     Devuelve: {"image_urls": [...], "thread_id": "...", "project_id": "...",
                "agent_message": "...", "ok": bool, "warning": str|None}
@@ -113,6 +123,8 @@ def generate_image(prompt: str, model: str | None = None,
         args += ["--thread-id", thread_id]
     if model:
         args += ["--prefer-models", json.dumps({"IMAGE": [model]})]
+    if attachments:
+        args += ["--attachments", *attachments]
 
     result = _run(args)
 
@@ -130,6 +142,9 @@ def generate_image(prompt: str, model: str | None = None,
         }
 
     urls = _extract_image_urls(result)
+    # Al editar (continuar un thread) el resultado trae [imagen_vieja, ..., imagen_nueva];
+    # devolvemos la más NUEVA primero para que image_urls[0] sea siempre la última generada.
+    urls = urls[::-1]
     ok = bool(urls) and result.get("generation_succeeded", True) is not False
     return {
         "image_urls": urls,

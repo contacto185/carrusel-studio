@@ -109,7 +109,9 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
       <div class="chips" id="suggested"></div>
     </div>
     <div class="col">
-      <label>Slides por carrusel</label>
+      <label>Cantidad de carruseles</label>
+      <input type="number" id="qty" value="1" min="1" max="20">
+      <label style="margin-top:12px;">Slides por carrusel</label>
       <input type="number" id="slides" value="5" min="3" max="10">
       <label style="margin-top:12px;">Tono</label>
       <input type="text" id="tone" value="motivador y cercano">
@@ -120,6 +122,13 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
         <option value="generate_image_gpt_image_2">GPT Image 2</option>
         <option value="generate_image_seedream_v4_5">Seedream 4.5</option>
       </select>
+    </div>
+  </div>
+  <div class="row" style="align-items:flex-end;">
+    <div class="col" style="flex:2;">
+      <label>Usar una referencia de ejemplo (opcional)</label>
+      <select id="refPick"><option value="">— Sin referencia —</option></select>
+      <div class="sub" id="refPickInfo" style="margin:6px 0 0;">Elige una referencia guardada (estilo, o fotos de Jimmy/Kira) y la usaré como ejemplo visual y de estructura.</div>
     </div>
   </div>
   <button class="btn" id="genBtn">Generar lote</button>
@@ -182,6 +191,16 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
   </div>
 
   <div class="card" style="padding:16px;margin-top:16px;">
+    <h2 style="font-size:16px;">Fotos de referencia (Jimmy / Kira / estética)</h2>
+    <p class="sub" style="margin-bottom:12px;">Sube fotos tuyas, de Kira o imágenes con la estética que te gusta. Las subo a Lovart y quedan como referencia para que las use al generar (mismo look, misma persona).</p>
+    <div class="row" style="align-items:flex-end;">
+      <div class="col"><label>Nombre de esta referencia</label><input type="text" id="refUpName" placeholder="Ej: Jimmy — fotos IA / Estética feed"></div>
+      <div class="col"><label>Imágenes</label><input type="file" id="refUpload" accept="image/*" multiple></div>
+    </div>
+    <div class="status" id="refUpStatus" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
     <label>Mis referencias guardadas (swipe file)</label>
     <div id="refList" style="margin-top:8px;"></div>
   </div>
@@ -208,7 +227,8 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 const SUGGESTED = ["Desinflamación: hábitos para bajar la inflamación","Movimiento consciente para empezar el día","Salud digestiva y energía","Rutina de movilidad para la espalda","Descanso y recuperación: dormir mejor","Alimentación antiinflamatoria sin complicarte","Respiración y manejo del estrés","Postura y trabajo de escritorio"];
 const cfg = { url: localStorage.getItem('cs_url')||'https://carrusel-studio.onrender.com', key: localStorage.getItem('cs_key')||'carrusel-flowback-2026' };
 let accounts = [];       // [{id,name,platform}]
-let carousels = [];      // {id,topic,hook,caption,hashtags,slides:[{title,body,brief,image_url,loading,error}],decision,accounts:Set,sending,result}
+let carousels = [];      // {id,topic,hook,caption,hashtags,slides:[{title,body,brief,image_url,thread_id,loading,error,editing}],decision,accounts:Set,sending,result}
+let refsData = [];       // referencias guardadas [{id,url,notes,text,images:[]}]
 let idSeq = 1;
 
 const $ = s => document.querySelector(s);
@@ -250,33 +270,40 @@ const glog=$('#genLog');
 function logln(m){ glog.classList.add('show'); glog.textContent+=m+'\n'; glog.scrollTop=glog.scrollHeight; }
 
 // Construye UN carrusel (copy + imágenes). Reutilizado por Generar y Recrear.
-async function buildOne(topic, slides, tone, model, reference, log){
+async function buildOne(topic, slides, tone, model, reference, attachments, log){
   log&&log('  · escribiendo copy...');
   const copy=await api('/api/copy',{method:'POST',body:JSON.stringify({topic,slides,tone,reference:reference||''})});
   const briefs=copy.image_briefs||[];
   const car={ id:idSeq++, topic:copy.topic||topic, hook:copy.hook||topic, caption:copy.caption||'', hashtags:copy.hashtags||[],
-    slides:(copy.slides||[]).map((s,i)=>({title:s.title||'',body:s.body||'',brief:briefs[i]||s.title||topic,image_url:null,loading:true,error:null})),
+    slides:(copy.slides||[]).map((s,i)=>({title:s.title||'',body:s.body||'',brief:briefs[i]||s.title||topic,image_url:null,thread_id:null,loading:true,error:null,editing:false})),
     decision:'pending', accounts:new Set(), sending:false, result:null };
   carousels.unshift(car); renderRev();
   log&&log('  · generando '+car.slides.length+' imágenes con Lovart...');
-  await Promise.all(car.slides.map(sl=>genSlide(car,sl,model)));
+  await Promise.all(car.slides.map(sl=>genSlide(car,sl,model,attachments)));
   log&&log('  ✓ listo');
   return car;
 }
 
 $('#genBtn').onclick=async()=>{
-  const topics=$('#topics').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  if(!topics.length){ toast('Escribe al menos un tema','err'); return; }
+  let topics=$('#topics').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const ref=refsData.find(r=>String(r.id)===$('#refPick').value);
+  if(!topics.length && ref) topics=[ref.notes||ref.topic||'Idea inspirada en la referencia'];
+  if(!topics.length){ toast('Escribe al menos un tema (o elige una referencia)','err'); return; }
   if(!cfg.url){ toast('Configura el backend primero (⚙)','err'); $('#cfgBtn').click(); return; }
+  const qty=Math.max(1,Math.min(+$('#qty').value||1,20));
   const slides=+$('#slides').value||5, tone=$('#tone').value, model=$('#model').value;
+  const reference=ref?`URL: ${ref.url||''}\nNotas: ${ref.notes||''}\nTexto: ${ref.text||''}`:'';
+  const attachments=ref?(ref.images||[]):[];
   $('#genBtn').disabled=true; glog.textContent='';
-  for(const topic of topics){
-    logln('▸ '+topic);
-    try{ await buildOne(topic,slides,tone,model,'',logln); }
+  if(ref) logln('★ usando referencia: '+(ref.notes||ref.url||('#'+ref.id))+(attachments.length?` (+${attachments.length} img)`:''));
+  for(let i=0;i<qty;i++){
+    const topic=topics[i%topics.length];
+    logln(`▸ [${i+1}/${qty}] ${topic}`);
+    try{ await buildOne(topic,slides,tone,model,reference,attachments,logln); }
     catch(e){ logln('  ✗ error: '+e.message); toast('Error en "'+topic+'": '+e.message,'err'); }
   }
   $('#genBtn').disabled=false;
-  toast('Lote generado. Revisa en la pestaña “Revisar”.','ok');
+  toast(`${qty} carrusel(es) generado(s). Revisa en “Revisar”.`,'ok');
   document.querySelector('.tab[data-page=rev]').click();
 };
 
@@ -284,11 +311,27 @@ $('#genBtn').onclick=async()=>{
 const rlog=$('#recLog'); const reclogln=m=>{ rlog.classList.add('show'); rlog.textContent+=m+'\n'; rlog.scrollTop=rlog.scrollHeight; };
 async function loadBrand(){ try{ const d=await api('/api/brand'); $('#brandText').value=d.brand||''; }catch(e){ toast('No pude cargar el estilo: '+e.message,'err'); } }
 $('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='status'; s.textContent='Guardando...'; try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:$('#brandText').value})}); s.className='status ok'; s.textContent='✓ Estilo guardado'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
-async function loadRefs(){ const box=$('#refList'); try{ const d=await api('/api/references'); const refs=d.references||[]; box.innerHTML=refs.length?refs.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;"><div style="flex:1;min-width:0;"><a href="${esc(r.url)}" target="_blank" style="font-size:12px;">${esc(r.url||'(sin link)')}</a><div class="sub" style="margin:2px 0 0;">${esc(r.notes||'')}</div></div><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button><button class="btn btn-ghost btn-sm" data-useref="${r.id}" data-u="${esc(r.url)}" data-n="${esc(r.notes)}" data-t="${esc(r.text||'')}">Usar</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
+async function loadRefs(){ const box=$('#refList'); try{ const d=await api('/api/references'); refsData=d.references||[];
+    // poblar el selector de referencia en Generar
+    const pick=$('#refPick'); pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||r.url||('ref #'+r.id)).slice(0,50))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
+    box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
+      ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;">`:''}
+      <div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--text);">${esc(r.notes||'(sin nota)')}</div>${r.url?`<a href="${esc(r.url)}" target="_blank" class="sub">${esc(r.url)}</a>`:''}<div class="sub" style="margin-top:2px;">${(r.images&&r.images.length?r.images.length+' img · ':'')}${esc((r.text||'').slice(0,60))}</div></div>
+      <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
     box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=async()=>{ await api('/api/references/'+b.dataset.delref,{method:'DELETE'}); loadRefs(); });
-    box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#recUrl').value=b.dataset.u; $('#recNotes').value=b.dataset.n; $('#recText').value=b.dataset.t; document.querySelector('#page-brand').scrollIntoView(); toast('Referencia cargada abajo. Pulsa “Recrear”.','ok'); });
+    box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#refPick').value=b.dataset.useref; document.querySelector('.tab[data-page=gen]').click(); toast('Referencia seleccionada en Generar.','ok'); });
   }catch(e){ box.innerHTML='<span class="sub">'+esc(e.message)+'</span>'; } }
 $('#refSave').onclick=async()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } try{ await api('/api/references',{method:'POST',body:JSON.stringify({url,notes,text})}); toast('Referencia guardada','ok'); loadRefs(); }catch(e){ toast(e.message,'err'); } };
+// Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
+$('#refUpload').onchange=async(e)=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const st=$('#refUpStatus'); st.className='status'; st.textContent='Subiendo '+files.length+' imagen(es)...';
+  const images=[];
+  for(const f of files){ try{ const fd=new FormData(); fd.append('file',f);
+    const r=await fetch(cfg.url.replace(/\/$/,'')+'/api/lovart/upload',{method:'POST',headers:{'X-App-Key':cfg.key},body:fd});
+    const d=await r.json(); if(d.url) images.push(d.url); }catch(err){ st.textContent='Error: '+err.message; } }
+  if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; await api('/api/references',{method:'POST',body:JSON.stringify({notes,images})}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; loadRefs(); }
+};
 $('#recBtn').onclick=async()=>{
   const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
   if(!url&&!notes&&!text){ toast('Pega un link o describe qué te gustó','err'); return; }
@@ -296,17 +339,31 @@ $('#recBtn').onclick=async()=>{
   const reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
   const slides=+$('#recSlides').value||5, model=$('#model').value, tone=$('#tone').value;
   $('#recBtn').disabled=true; rlog.textContent=''; reclogln('▸ Recreando a tu estilo...');
-  try{ await buildOne(topic,slides,tone,model,reference,reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
+  try{ await buildOne(topic,slides,tone,model,reference,[],reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
   catch(e){ reclogln('  ✗ '+e.message); toast('Error: '+e.message,'err'); }
   $('#recBtn').disabled=false;
 };
 
-async function genSlide(car,sl,model){
+async function genSlide(car,sl,model,attachments){
   sl.loading=true; sl.error=null; renderRev();
   try{
-    const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify({prompt:sl.brief,model})});
+    const body={prompt:sl.brief,model}; if(attachments&&attachments.length) body.attachments=attachments;
+    const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify(body)});
     sl.image_url=(r.image_urls&&r.image_urls[0])||null;
+    sl.thread_id=r.thread_id||sl.thread_id;
     if(!sl.image_url) sl.error=r.warning||'sin imagen';
+  }catch(e){ sl.error=e.message; }
+  sl.loading=false; renderRev();
+}
+// Editar una imagen: continúa el thread de Lovart con el cambio pedido.
+async function editSlide(car,sl,model,change){
+  if(!change.trim()) return;
+  sl.loading=true; sl.error=null; sl.editing=false; renderRev();
+  try{
+    const body={prompt:change,model,thread_id:sl.thread_id};
+    const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify(body)});
+    if(r.image_urls&&r.image_urls[0]){ sl.image_url=r.image_urls[0]; sl.thread_id=r.thread_id||sl.thread_id; }
+    else sl.error=r.warning||'no se pudo editar';
   }catch(e){ sl.error=e.message; }
   sl.loading=false; renderRev();
 }
@@ -321,6 +378,7 @@ function renderRev(){
   pend.forEach(car=>{
     const el=document.createElement('div'); el.className='card';
     el.innerHTML=`<div class="card-head"><div class="t"><div class="hook">${esc(car.hook)}</div><div class="topic">${esc(car.topic)}</div></div>
+      <button class="btn btn-ghost btn-sm" data-saveref="${car.id}">★ Guardar ref</button>
       <button class="btn btn-sm" data-yes="${car.id}">✓ Sí</button>
       <button class="btn btn-sm btn-no" data-no="${car.id}">✕ No</button></div>
       <div class="strip">${car.slides.map((s,i)=>slideHtml(car,s,i)).join('')}</div>
@@ -330,6 +388,9 @@ function renderRev(){
   list.querySelectorAll('[data-yes]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.yes);c.decision='yes';renderRev();renderApp();toast('Aprobado → pestaña Aprobados','ok');});
   list.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.no);c.decision='no';renderRev();});
   list.querySelectorAll('[data-regen]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);genSlide(c,c.slides[+b.dataset.slide],$('#model').value);});
+  list.querySelectorAll('[data-saveref]').forEach(b=>b.onclick=()=>saveCarouselAsRef(carousels.find(x=>x.id==b.dataset.saveref)));
+  list.querySelectorAll('[data-edittoggle]').forEach(b=>b.onclick=()=>{const box=b.parentElement.querySelector('.slide-edit');box.style.display=box.style.display==='none'?'block':'none';});
+  list.querySelectorAll('[data-editapply]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);const sl=c.slides[+b.dataset.slide];if(!sl.thread_id){toast('Regenera esta imagen primero para poder editarla','err');return;}const ta=b.parentElement.querySelector('textarea');editSlide(c,sl,$('#model').value,ta.value);});
 }
 function slideHtml(car,s,i){
   let inner;
@@ -338,7 +399,20 @@ function slideHtml(car,s,i){
   else inner=`<div style="font-size:10px;color:var(--red);padding:8px;text-align:center">${esc(s.error||'sin imagen')}</div>`;
   return `<div class="slide"><div class="frame"><span class="num">${i+1}</span>${inner}</div>
     <div class="cap">${esc(s.body||'')}</div>
-    <button class="icon-btn regen" data-regen data-car="${car.id}" data-slide="${i}">↻ Regenerar</button></div>`;
+    <div style="display:flex;gap:4px;margin-top:5px;">
+      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-regen data-car="${car.id}" data-slide="${i}">↻ Regenerar</button>
+      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-edittoggle>✎ Editar</button>
+    </div>
+    <div class="slide-edit" style="display:none;margin-top:5px;">
+      <textarea placeholder="¿Qué cambiar? ej: fondo verde, agrega plantas, más luz" style="width:100%;min-height:44px;font-size:11px;"></textarea>
+      <button class="icon-btn" style="width:100%;font-size:9px;padding:5px;margin-top:4px;" data-editapply data-car="${car.id}" data-slide="${i}">Aplicar cambio</button>
+    </div></div>`;
+}
+async function saveCarouselAsRef(car){
+  const images=car.slides.filter(s=>s.image_url).map(s=>s.image_url);
+  const text=car.slides.map((s,i)=>`${i+1}. ${s.title}: ${s.body}`).join('\n');
+  try{ await api('/api/references',{method:'POST',body:JSON.stringify({notes:car.hook||car.topic,text,images})}); toast('★ Guardado como referencia','ok'); loadRefs(); }
+  catch(e){ toast('Error: '+e.message,'err'); }
 }
 
 // ---- aprobados ----
@@ -407,7 +481,7 @@ async function sendDraft(car){
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // init
-if(!cfg.url){ setTimeout(()=>$('#cfgBtn').click(),400); }
+if(!cfg.url){ setTimeout(()=>$('#cfgBtn').click(),400); } else { loadRefs(); }
 renderRev(); renderApp();
 </script>
 </body>

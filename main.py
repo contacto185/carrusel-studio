@@ -22,7 +22,9 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+import tempfile
+
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -67,6 +69,7 @@ class ImageReq(BaseModel):
     model: Optional[str] = None
     project_id: Optional[str] = None
     thread_id: Optional[str] = None
+    attachments: Optional[list[str]] = None
 
 
 class CarouselReq(BaseModel):
@@ -133,7 +136,7 @@ def api_image(req: ImageReq, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
     try:
         return lovart_client.generate_image(
-            req.prompt, req.model, req.project_id, req.thread_id
+            req.prompt, req.model, req.project_id, req.thread_id, req.attachments
         )
     except lovart_client.LovartError as e:
         raise HTTPException(status_code=502, detail=str(e))
@@ -149,7 +152,7 @@ def api_confirm(req: ConfirmReq, x_app_key: Optional[str] = Header(default=None)
 
 
 def _build_carousel(topic: str, slides: int, tone: str, model: Optional[str],
-                    reference: str = "") -> dict:
+                    reference: str = "", attachments: Optional[list[str]] = None) -> dict:
     """Genera el copy y una imagen por slide. Devuelve el carrusel completo."""
     copy = copy_client.generate_copy(topic, slides, tone, reference=reference)
     briefs = copy.get("image_briefs") or []
@@ -164,7 +167,7 @@ def _build_carousel(topic: str, slides: int, tone: str, model: Optional[str],
             f"Sin ningún texto ni letras en la imagen."
         )
         try:
-            img = lovart_client.generate_image(prompt, model)
+            img = lovart_client.generate_image(prompt, model, attachments=attachments)
             image_url = img["image_urls"][0] if img.get("image_urls") else None
             warning = img.get("warning")
         except lovart_client.LovartError as e:
@@ -241,6 +244,7 @@ class RefReq(BaseModel):
     url: str = ""
     notes: str = ""
     text: str = ""
+    images: Optional[list[str]] = None
 
 
 @app.get("/api/references")
@@ -252,7 +256,22 @@ def api_get_refs(x_app_key: Optional[str] = Header(default=None)):
 @app.post("/api/references")
 def api_add_ref(req: RefReq, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
-    return {"reference": brand_mod.add_reference(req.url, req.notes, req.text)}
+    return {"reference": brand_mod.add_reference(req.url, req.notes, req.text, req.images or [])}
+
+
+@app.post("/api/lovart/upload")
+async def api_upload(file: UploadFile = File(...), x_app_key: Optional[str] = Header(default=None)):
+    """Sube una imagen (ej. foto de Jimmy/Kira) a Lovart y devuelve su URL para usar de referencia."""
+    _check_key(x_app_key)
+    try:
+        suffix = _Path(file.filename or "img.png").suffix or ".png"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            path = tmp.name
+        url = lovart_client.upload_file(path)
+        return {"url": url}
+    except lovart_client.LovartError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.delete("/api/references/{ref_id}")

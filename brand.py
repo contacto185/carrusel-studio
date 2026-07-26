@@ -93,10 +93,11 @@ def list_references() -> list[dict]:
     return []
 
 
-def add_reference(url: str, notes: str = "", text: str = "") -> dict:
+def add_reference(url: str, notes: str = "", text: str = "",
+                  images: list[str] | None = None) -> dict:
     refs = list_references()
     ref = {"id": (max([r.get("id", 0) for r in refs], default=0) + 1),
-           "url": url, "notes": notes, "text": text}
+           "url": url, "notes": notes, "text": text, "images": images or []}
     refs.append(ref)
     REFS_FILE.write_text(json.dumps(refs, ensure_ascii=False, indent=2), encoding="utf-8")
     return ref
