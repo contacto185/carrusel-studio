@@ -315,7 +315,7 @@ async function loadRefs(){ const box=$('#refList'); try{ const d=await api('/api
     // poblar el selector de referencia en Generar
     const pick=$('#refPick'); pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||r.url||('ref #'+r.id)).slice(0,50))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
     box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
-      ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;">`:''}
+      ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" style="width:46px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);">`:''}
       <div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--text);">${esc(r.notes||'(sin nota)')}</div>${r.url?`<a href="${esc(r.url)}" target="_blank" class="sub">${esc(r.url)}</a>`:''}<div class="sub" style="margin-top:2px;">${(r.images&&r.images.length?r.images.length+' img · ':'')}${esc((r.text||'').slice(0,60))}</div></div>
       <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
     box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=async()=>{ await api('/api/references/'+b.dataset.delref,{method:'DELETE'}); loadRefs(); });
@@ -395,7 +395,7 @@ function renderRev(){
 function slideHtml(car,s,i){
   let inner;
   if(s.loading) inner=`<div class="mini-spin"></div>`;
-  else if(s.image_url) inner=`<img src="${s.image_url}"><div class="ov">${esc(s.title)}</div>`;
+  else if(s.image_url) inner=`<img src="${s.image_url}" loading="lazy" decoding="async"><div class="ov">${esc(s.title)}</div>`;
   else inner=`<div style="font-size:10px;color:var(--red);padding:8px;text-align:center">${esc(s.error||'sin imagen')}</div>`;
   return `<div class="slide"><div class="frame"><span class="num">${i+1}</span>${inner}</div>
     <div class="cap">${esc(s.body||'')}</div>
@@ -430,7 +430,7 @@ function renderApp(){
     const media=car.slides.filter(s=>s.image_url).length;
     const el=document.createElement('div'); el.className='card';
     el.innerHTML=`<div class="card-head"><div class="t"><div class="hook">${esc(car.hook)}</div><div class="topic">${esc(car.topic)} · ${media} imágenes</div></div></div>
-      <div class="strip">${car.slides.map((s,i)=>`<div class="slide"><div class="frame"><span class="num">${i+1}</span>${s.image_url?`<img src="${s.image_url}">`:`<div style="font-size:10px;color:var(--red);padding:8px">sin imagen</div>`}</div></div>`).join('')}</div>
+      <div class="strip">${car.slides.map((s,i)=>`<div class="slide"><div class="frame"><span class="num">${i+1}</span>${s.image_url?`<img src="${s.image_url}" loading="lazy" decoding="async">`:`<div style="font-size:10px;color:var(--red);padding:8px">sin imagen</div>`}</div></div>`).join('')}</div>
       <div style="padding:12px 16px;"><label>Copy / caption del post</label><textarea data-cap="${car.id}">${esc(car.caption)}\n\n${car.hashtags.join(' ')}</textarea></div>
       <div class="acct-box">
         <label>Cuentas destino</label>
