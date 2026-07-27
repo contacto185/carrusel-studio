@@ -104,9 +104,15 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
   <p class="sub">Escribe uno o varios temas (uno por línea). Para cada tema creo el copy con Claude y las imágenes con Lovart. Después los revisas y apruebas.</p>
   <div class="row">
     <div class="col" style="flex:2;min-width:280px;">
-      <label>Temas (uno por línea)</label>
-      <textarea id="topics" placeholder="Desinflamación: hábitos simples para bajar la inflamación&#10;Movimiento consciente para empezar el día&#10;Salud digestiva y energía"></textarea>
+      <label>Prompt del carrusel — describe el tema (uno por línea para varios)</label>
+      <textarea id="topics" placeholder="Ej: Ansiedad: 3 señales de tu cuerpo&#10;O más detallado: Carrusel con una foto mía entrenando en casa, tema desinflamación, tono cercano"></textarea>
       <div class="chips" id="suggested"></div>
+      <label style="margin-top:12px;">Adjuntar imagen (opcional) — foto tuya, de Kira, o de referencia para este carrusel</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">📎 Adjuntar imagen<input type="file" id="genImg" accept="image/*" multiple style="display:none;"></label>
+        <span class="status" id="genImgStatus"></span>
+      </div>
+      <div id="genImgThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
     </div>
     <div class="col">
       <label>Cantidad de carruseles</label>
@@ -275,6 +281,19 @@ $('#cfgTest').onclick=async()=>{ const s=$('#cfgStatus'); s.className='status'; 
 // ---- sugerencias ----
 const sug=$('#suggested'); SUGGESTED.forEach(t=>{ const c=document.createElement('div'); c.className='chip'; c.textContent='+ '+t; c.onclick=()=>{ const ta=$('#topics'); ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+t; }; sug.appendChild(c); });
 
+// ---- Adjuntar imagen al prompt (se sube a Lovart y se usa como referencia visual) ----
+let genAttachments=[];
+function renderGenThumbs(){ const box=$('#genImgThumbs'); if(!box) return; box.innerHTML=genAttachments.map((u,i)=>`<div style="position:relative;"><img src="${esc(u)}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);"><span data-rmimg="${i}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border-radius:50%;width:17px;height:17px;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</span></div>`).join(''); box.querySelectorAll('[data-rmimg]').forEach(b=>b.onclick=()=>{ genAttachments.splice(+b.dataset.rmimg,1); renderGenThumbs(); $('#genImgStatus').textContent=genAttachments.length?genAttachments.length+' adjunta(s)':''; }); }
+$('#genImg').onchange=async(e)=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  if(!cfg.url){ toast('Configura el backend primero (⚙)','err'); return; }
+  const st=$('#genImgStatus'); st.className='status'; st.textContent='Subiendo '+files.length+'…';
+  for(const f of files){ try{ const fd=new FormData(); fd.append('file',f);
+    const r=await fetch(cfg.url.replace(/\/$/,'')+'/api/lovart/upload',{method:'POST',headers:{'X-App-Key':cfg.key},body:fd});
+    const d=await r.json(); if(d.url) genAttachments.push(d.url); else throw new Error(d.detail||'sin url'); }catch(err){ st.className='status err'; st.textContent='Error: '+err.message; } }
+  $('#genImg').value=''; if(genAttachments.length){ st.className='status ok'; st.textContent=genAttachments.length+' imagen(es) adjunta(s)'; } renderGenThumbs();
+};
+
 // ---- generación ----
 const glog=$('#genLog');
 function logln(m){ glog.classList.add('show'); glog.textContent+=m+'\n'; glog.scrollTop=glog.scrollHeight; }
@@ -303,7 +322,7 @@ $('#genBtn').onclick=async()=>{
   const qty=Math.max(1,Math.min(+$('#qty').value||1,20));
   const slides=+$('#slides').value||5, tone=$('#tone').value, model=$('#model').value;
   const reference=ref?`URL: ${ref.url||''}\nNotas: ${ref.notes||''}\nTexto: ${ref.text||''}`:'';
-  const attachments=ref?(ref.images||[]):[];
+  const attachments=[...(ref?(ref.images||[]):[]), ...genAttachments];
   $('#genBtn').disabled=true; glog.textContent='';
   if(ref) logln('★ usando referencia: '+(ref.notes||ref.url||('#'+ref.id))+(attachments.length?` (+${attachments.length} img)`:''));
   for(let i=0;i<qty;i++){
