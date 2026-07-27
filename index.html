@@ -311,17 +311,20 @@ $('#genBtn').onclick=async()=>{
 const rlog=$('#recLog'); const reclogln=m=>{ rlog.classList.add('show'); rlog.textContent+=m+'\n'; rlog.scrollTop=rlog.scrollHeight; };
 async function loadBrand(){ try{ const d=await api('/api/brand'); $('#brandText').value=d.brand||''; }catch(e){ toast('No pude cargar el estilo: '+e.message,'err'); } }
 $('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='status'; s.textContent='Guardando...'; try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:$('#brandText').value})}); s.className='status ok'; s.textContent='✓ Estilo guardado'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
-async function loadRefs(){ const box=$('#refList'); try{ const d=await api('/api/references'); refsData=d.references||[];
-    // poblar el selector de referencia en Generar
-    const pick=$('#refPick'); pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||r.url||('ref #'+r.id)).slice(0,50))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
+// Referencias guardadas en el NAVEGADOR (localStorage): sobreviven a redeploys y reinicios del servidor.
+function getRefs(){ try{ return JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){ return []; } }
+function setRefs(r){ localStorage.setItem('cs_refs', JSON.stringify(r)); refsData=r; }
+function addRef(ref){ const r=getRefs(); ref.id=r.reduce((m,x)=>Math.max(m,x.id||0),0)+1; r.push(ref); setRefs(r); return ref; }
+function loadRefs(){ const box=$('#refList'); if(!box) return; refsData=getRefs();
+    const pick=$('#refPick'); if(pick) pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||r.url||('ref #'+r.id)).slice(0,50))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
     box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
       ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" style="width:46px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);">`:''}
       <div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--text);">${esc(r.notes||'(sin nota)')}</div>${r.url?`<a href="${esc(r.url)}" target="_blank" class="sub">${esc(r.url)}</a>`:''}<div class="sub" style="margin-top:2px;">${(r.images&&r.images.length?r.images.length+' img · ':'')}${esc((r.text||'').slice(0,60))}</div></div>
       <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
-    box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=async()=>{ await api('/api/references/'+b.dataset.delref,{method:'DELETE'}); loadRefs(); });
+    box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=()=>{ setRefs(getRefs().filter(x=>String(x.id)!==String(b.dataset.delref))); loadRefs(); });
     box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#refPick').value=b.dataset.useref; document.querySelector('.tab[data-page=gen]').click(); toast('Referencia seleccionada en Generar.','ok'); });
-  }catch(e){ box.innerHTML='<span class="sub">'+esc(e.message)+'</span>'; } }
-$('#refSave').onclick=async()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } try{ await api('/api/references',{method:'POST',body:JSON.stringify({url,notes,text})}); toast('Referencia guardada','ok'); loadRefs(); }catch(e){ toast(e.message,'err'); } };
+}
+$('#refSave').onclick=()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } addRef({url,notes,text,images:[]}); toast('Referencia guardada','ok'); loadRefs(); };
 // Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
 $('#refUpload').onchange=async(e)=>{
   const files=[...e.target.files]; if(!files.length) return;
@@ -330,7 +333,7 @@ $('#refUpload').onchange=async(e)=>{
   for(const f of files){ try{ const fd=new FormData(); fd.append('file',f);
     const r=await fetch(cfg.url.replace(/\/$/,'')+'/api/lovart/upload',{method:'POST',headers:{'X-App-Key':cfg.key},body:fd});
     const d=await r.json(); if(d.url) images.push(d.url); }catch(err){ st.textContent='Error: '+err.message; } }
-  if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; await api('/api/references',{method:'POST',body:JSON.stringify({notes,images})}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; loadRefs(); }
+  if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; addRef({notes,images,text:'Fotos subidas'}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; loadRefs(); }
 };
 $('#recBtn').onclick=async()=>{
   const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
@@ -408,11 +411,11 @@ function slideHtml(car,s,i){
       <button class="icon-btn" style="width:100%;font-size:9px;padding:5px;margin-top:4px;" data-editapply data-car="${car.id}" data-slide="${i}">Aplicar cambio</button>
     </div></div>`;
 }
-async function saveCarouselAsRef(car){
+function saveCarouselAsRef(car){
   const images=car.slides.filter(s=>s.image_url).map(s=>s.image_url);
   const text=car.slides.map((s,i)=>`${i+1}. ${s.title}: ${s.body}`).join('\n');
-  try{ await api('/api/references',{method:'POST',body:JSON.stringify({notes:car.hook||car.topic,text,images})}); toast('★ Guardado como referencia','ok'); loadRefs(); }
-  catch(e){ toast('Error: '+e.message,'err'); }
+  addRef({notes:car.hook||car.topic, text, images});
+  toast('★ Guardado como referencia','ok'); loadRefs();
 }
 
 // ---- aprobados ----
