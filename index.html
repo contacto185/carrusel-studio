@@ -221,6 +221,16 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
   </div>
 </div>
 
+<!-- VISOR DE REFERENCIA -->
+<div class="modal-bg" id="refModal">
+  <div class="modal" style="max-width:760px;width:100%;">
+    <h3 id="refModalTitle">Referencia</h3>
+    <p class="sub" style="margin-bottom:12px;">Imágenes de este carrusel de referencia.</p>
+    <div id="refModalBody" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;max-height:66vh;overflow-y:auto;"></div>
+    <div style="margin-top:14px;text-align:right;"><button class="btn btn-sm" id="refModalClose">Cerrar</button></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -315,15 +325,25 @@ $('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='statu
 function getRefs(){ try{ return JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){ return []; } }
 function setRefs(r){ localStorage.setItem('cs_refs', JSON.stringify(r)); refsData=r; }
 function addRef(ref){ const r=getRefs(); ref.id=r.reduce((m,x)=>Math.max(m,x.id||0),0)+1; r.push(ref); setRefs(r); return ref; }
-function loadRefs(){ const box=$('#refList'); if(!box) return; refsData=getRefs();
-    const pick=$('#refPick'); if(pick) pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||r.url||('ref #'+r.id)).slice(0,50))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
-    box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
-      ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" style="width:46px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);">`:''}
-      <div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--text);">${esc(r.notes||'(sin nota)')}</div>${r.url?`<a href="${esc(r.url)}" target="_blank" class="sub">${esc(r.url)}</a>`:''}<div class="sub" style="margin-top:2px;">${(r.images&&r.images.length?r.images.length+' img · ':'')}${esc((r.text||'').slice(0,60))}</div></div>
-      <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button><button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
+function refreshPicker(){ const pick=$('#refPick'); if(!pick) return; const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join(''); pick.value=cur; }
+function openRefViewer(ref){ if(!ref) return; $('#refModalTitle').textContent=ref.notes||'Referencia sin nombre'; $('#refModalBody').innerHTML=(ref.images&&ref.images.length)?ref.images.map(u=>`<img src="${esc(u)}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block;">`).join(''):'<span class="sub">Esta referencia no tiene imágenes.</span>'; $('#refModal').classList.add('show'); }
+function loadRefs(){ const box=$('#refList'); if(!box) return; refsData=getRefs(); refreshPicker();
+    box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
+      ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" data-viewref="${r.id}" title="Ver" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);cursor:zoom-in;">`:'<div style="width:48px;height:48px;border-radius:6px;background:var(--s3);flex-shrink:0;"></div>'}
+      <div style="flex:1;min-width:0;">
+        <input type="text" data-nameref="${r.id}" value="${esc(r.notes||'')}" placeholder="Ponle un nombre…" style="width:100%;font-size:12px;padding:6px 9px;">
+        <div class="sub" style="margin-top:3px;">${(r.images&&r.images.length?r.images.length+' img · ':'')}${esc((r.text||'').slice(0,50))}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" data-viewref="${r.id}">Ver</button>
+      <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button>
+      <button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
+    box.querySelectorAll('[data-nameref]').forEach(inp=>inp.onchange=()=>{ const refs=getRefs(); const r=refs.find(x=>String(x.id)===inp.dataset.nameref); if(r){ r.notes=inp.value.trim(); setRefs(refs); refreshPicker(); toast('Nombre guardado','ok'); } });
+    box.querySelectorAll('[data-viewref]').forEach(el=>el.onclick=()=>openRefViewer(refsData.find(x=>String(x.id)===String(el.dataset.viewref))));
     box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=()=>{ setRefs(getRefs().filter(x=>String(x.id)!==String(b.dataset.delref))); loadRefs(); });
     box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#refPick').value=b.dataset.useref; document.querySelector('.tab[data-page=gen]').click(); toast('Referencia seleccionada en Generar.','ok'); });
 }
+$('#refModalClose').onclick=()=>$('#refModal').classList.remove('show');
+$('#refModal').onclick=e=>{ if(e.target.id==='refModal') $('#refModal').classList.remove('show'); };
 $('#refSave').onclick=()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } addRef({url,notes,text,images:[]}); toast('Referencia guardada','ok'); loadRefs(); };
 // Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
 $('#refUpload').onchange=async(e)=>{
