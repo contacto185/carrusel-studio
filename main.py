@@ -35,6 +35,7 @@ import ghl_client
 import copy_client
 import brand as brand_mod
 import ratelimit
+import refs_store
 
 app = FastAPI(title="Carrusel Studio Backend", version="1.0.0")
 
@@ -255,7 +256,7 @@ def api_put_brand(req: BrandReq, x_app_key: Optional[str] = Header(default=None)
     return {"ok": True}
 
 
-# ---------- Referencias (swipe file) ----------
+# ---------- Referencias (swipe file) — almacén COMPARTIDO (Upstash) ----------
 class RefReq(BaseModel):
     url: str = ""
     notes: str = ""
@@ -263,16 +264,56 @@ class RefReq(BaseModel):
     images: Optional[list[str]] = None
 
 
+class RefUpdateReq(BaseModel):
+    notes: Optional[str] = None
+    url: Optional[str] = None
+    text: Optional[str] = None
+    images: Optional[list[str]] = None
+
+
+class BulkRefsReq(BaseModel):
+    references: list[RefReq]
+    mode: str = "if_empty"   # if_empty | merge | replace
+
+
 @app.get("/api/references")
 def api_get_refs(x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
-    return {"references": brand_mod.list_references()}
+    try:
+        return {"references": refs_store.list_all(), "shared": refs_store.upstash_enabled()}
+    except refs_store.RefsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.post("/api/references")
 def api_add_ref(req: RefReq, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
-    return {"reference": brand_mod.add_reference(req.url, req.notes, req.text, req.images or [])}
+    try:
+        return {"reference": refs_store.add(req.model_dump())}
+    except refs_store.RefsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.put("/api/references/{ref_id}")
+def api_update_ref(ref_id: int, req: RefUpdateReq, x_app_key: Optional[str] = Header(default=None)):
+    _check_key(x_app_key)
+    try:
+        ref = refs_store.update(ref_id, req.model_dump(exclude_none=True))
+        if ref is None:
+            raise HTTPException(status_code=404, detail="Referencia no encontrada.")
+        return {"reference": ref}
+    except refs_store.RefsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/references/bulk")
+def api_bulk_refs(req: BulkRefsReq, x_app_key: Optional[str] = Header(default=None)):
+    _check_key(x_app_key)
+    try:
+        items = [r.model_dump() for r in req.references]
+        return refs_store.bulk_seed(items, mode=req.mode if req.mode in ("if_empty", "merge", "replace") else "if_empty")
+    except refs_store.RefsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.post("/api/lovart/upload")
@@ -294,8 +335,11 @@ async def api_upload(request: Request, file: UploadFile = File(...), x_app_key: 
 @app.delete("/api/references/{ref_id}")
 def api_del_ref(ref_id: int, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
-    brand_mod.delete_reference(ref_id)
-    return {"ok": True}
+    try:
+        refs_store.delete(ref_id)
+        return {"ok": True}
+    except refs_store.RefsError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ---------- Recrear desde una referencia (link que le gustó) ----------

@@ -247,10 +247,7 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 
 <script>
 const SUGGESTED = ["Desinflamación: hábitos para bajar la inflamación","Movimiento consciente para empezar el día","Salud digestiva y energía","Rutina de movilidad para la espalda","Descanso y recuperación: dormir mejor","Alimentación antiinflamatoria sin complicarte","Respiración y manejo del estrés","Postura y trabajo de escritorio"];
-// Semilla durable de referencias: se incrusta en la app (aparece en cualquier equipo,
-// sin depender de localStorage). Se llena con los carruseles de Lovart de Jimmy.
-// Cada item: {notes:"nombre", images:["url", ...], text:"", url:""}
-const DEFAULT_REFS = [];
+// (Las referencias ahora viven en el almacén COMPARTIDO del servidor — ver más abajo.)
 const cfg = { url: localStorage.getItem('cs_url')||'https://carrusel-studio.onrender.com', key: localStorage.getItem('cs_key')||'carrusel-flowback-2026' };
 let accounts = [];       // [{id,name,platform}]
 let carousels = [];      // {id,topic,hook,caption,hashtags,slides:[{title,body,brief,image_url,thread_id,loading,error,editing}],decision,accounts:Set,sending,result}
@@ -400,42 +397,40 @@ $('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='statu
   localStorage.setItem('cs_brand',val);   // respaldo local (sobrevive redeploys)
   try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:val})}); s.className='status ok'; s.textContent='✓ Estilo guardado y respaldado'; }
   catch(e){ s.className='status ok'; s.textContent='✓ Respaldado en el navegador (servidor no respondió: '+e.message+')'; } };
-// Referencias guardadas en el NAVEGADOR (localStorage): sobreviven a redeploys y reinicios del servidor.
-function getRefs(){ try{ return JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){ return []; } }
-function setRefs(r){ localStorage.setItem('cs_refs', JSON.stringify(r)); refsData=r; }
-function addRef(ref){ const r=getRefs(); ref.id=r.reduce((m,x)=>Math.max(m,x.id||0),0)+1; r.push(ref); setRefs(r); return ref; }
-// Si el navegador no tiene referencias y hay semilla incrustada, la carga (una vez).
-function seedRefsIfEmpty(){
-  if(!DEFAULT_REFS.length) return;
-  let cur=[]; try{ cur=JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){}
-  if(cur.length) return;                                   // ya tiene referencias
-  if(localStorage.getItem('cs_refs_seeded')==='1') return; // ya se sembró antes (y las borró a propósito)
-  setRefs(DEFAULT_REFS.map((r,i)=>({url:'',text:'',images:[],notes:'',...r,id:i+1})));
-  localStorage.setItem('cs_refs_seeded','1');
+// ---- Referencias: almacén COMPARTIDO en el servidor (Upstash) ----
+// Se leen y editan vía API para que aparezcan y se sincronicen en TODOS los equipos.
+// localStorage se usa solo como caché/offline.
+let refsShared=false;
+function cachedRefs(){ try{ return JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){ return []; } }
+function cacheRefs(){ try{ localStorage.setItem('cs_refs', JSON.stringify(refsData||[])); }catch(e){} }
+async function serverListRefs(){ const d=await api('/api/references'); refsShared=!!d.shared; return d.references||[]; }
+// Agregar una referencia (al servidor; cae a local si no hay conexión).
+async function addRefServer(ref){
+  try{ const d=await api('/api/references',{method:'POST',body:JSON.stringify(ref)}); refsData.push(d.reference); cacheRefs(); refreshPicker(); renderRefList(); return d.reference; }
+  catch(e){ const local={url:'',text:'',images:[],notes:'',...ref,id:'local-'+Date.now()}; refsData.push(local); cacheRefs(); refreshPicker(); renderRefList(); toast('Guardado local (no sincronizó): '+e.message,'err'); return local; }
 }
-// Exportar referencias como respaldo descargable (JSON).
+// Exportar referencias (respaldo descargable).
 function exportRefs(){
-  const data=localStorage.getItem('cs_refs')||'[]';
-  const blob=new Blob([data],{type:'application/json'});
+  const blob=new Blob([JSON.stringify(refsData||[])],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='carrusel-studio-referencias.json'; document.body.appendChild(a); a.click();
   a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast('Respaldo descargado','ok');
 }
-// Importar referencias desde un JSON (mergea sin duplicar).
+// Importar referencias (las sube al almacén compartido, sin duplicar).
 function importRefs(file){
   const rd=new FileReader();
-  rd.onload=()=>{ try{
+  rd.onload=async()=>{ try{
     const arr=JSON.parse(rd.result); if(!Array.isArray(arr)) throw new Error('el archivo no es una lista de referencias');
-    const cur=getRefs(); const seen=new Set(cur.map(r=>(r.images||[]).join('|')+'::'+(r.notes||'')));
-    let maxId=cur.reduce((m,x)=>Math.max(m,x.id||0),0), added=0;
-    arr.forEach(r=>{ const k=(r.images||[]).join('|')+'::'+(r.notes||''); if(seen.has(k))return; seen.add(k); maxId++; cur.push({url:'',text:'',images:[],notes:'',...r,id:maxId}); added++; });
-    setRefs(cur); loadRefs(); toast(added+' referencia(s) importada(s)','ok');
+    const clean=arr.map(({id,...r})=>({url:r.url||'',notes:r.notes||'',text:r.text||'',images:r.images||[]}));
+    const res=await api('/api/references/bulk',{method:'POST',body:JSON.stringify({references:clean,mode:'merge'})});
+    await loadRefs(); toast((res.seeded||0)+' referencia(s) importada(s)','ok');
   }catch(err){ toast('No pude importar: '+err.message,'err'); } };
   rd.readAsText(file);
 }
 function refreshPicker(){ const pick=$('#refPick'); if(!pick) return; const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join(''); pick.value=cur; }
 function openRefViewer(ref){ if(!ref) return; $('#refModalTitle').textContent=ref.notes||'Referencia sin nombre'; $('#refModalBody').innerHTML=(ref.images&&ref.images.length)?ref.images.map(u=>`<img src="${esc(u)}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block;">`).join(''):'<span class="sub">Esta referencia no tiene imágenes.</span>'; $('#refModal').classList.add('show'); }
-function loadRefs(){ const box=$('#refList'); if(!box) return; seedRefsIfEmpty(); refsData=getRefs(); refreshPicker();
+// Render de la lista (sin fetch).
+function renderRefList(){ const box=$('#refList'); if(!box) return;
     box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
       ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" data-viewref="${r.id}" title="Ver" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);cursor:zoom-in;">`:'<div style="width:48px;height:48px;border-radius:6px;background:var(--s3);flex-shrink:0;"></div>'}
       <div style="flex:1;min-width:0;">
@@ -445,16 +440,33 @@ function loadRefs(){ const box=$('#refList'); if(!box) return; seedRefsIfEmpty()
       <button class="btn btn-ghost btn-sm" data-viewref="${r.id}">Ver</button>
       <button class="btn btn-ghost btn-sm" data-useref="${r.id}">Usar</button>
       <button class="btn-no btn btn-sm" data-delref="${r.id}">✕</button></div>`).join(''):'<span class="sub">Aún no guardas referencias.</span>';
-    box.querySelectorAll('[data-nameref]').forEach(inp=>inp.onchange=()=>{ const refs=getRefs(); const r=refs.find(x=>String(x.id)===inp.dataset.nameref); if(r){ r.notes=inp.value.trim(); setRefs(refs); refreshPicker(); toast('Nombre guardado','ok'); } });
+    box.querySelectorAll('[data-nameref]').forEach(inp=>inp.onchange=async()=>{ const r=refsData.find(x=>String(x.id)===inp.dataset.nameref); if(!r) return; r.notes=inp.value.trim(); cacheRefs(); refreshPicker(); try{ await api('/api/references/'+r.id,{method:'PUT',body:JSON.stringify({notes:r.notes})}); toast(refsShared?'Nombre guardado (visible para todos)':'Nombre guardado','ok'); }catch(e){ toast('No sincronizó: '+e.message,'err'); } });
     box.querySelectorAll('[data-viewref]').forEach(el=>el.onclick=()=>openRefViewer(refsData.find(x=>String(x.id)===String(el.dataset.viewref))));
-    box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=()=>{ setRefs(getRefs().filter(x=>String(x.id)!==String(b.dataset.delref))); loadRefs(); });
+    box.querySelectorAll('[data-delref]').forEach(b=>b.onclick=async()=>{ const id=b.dataset.delref; refsData=refsData.filter(x=>String(x.id)!==String(id)); cacheRefs(); renderRefList(); refreshPicker(); try{ await api('/api/references/'+id,{method:'DELETE'}); }catch(e){ toast('No sincronizó el borrado: '+e.message,'err'); } });
     box.querySelectorAll('[data-useref]').forEach(b=>b.onclick=()=>{ $('#refPick').value=b.dataset.useref; document.querySelector('.tab[data-page=gen]').click(); toast('Referencia seleccionada en Generar.','ok'); });
+}
+// Cargar referencias desde el servidor (con migración: si el server está vacío y este
+// navegador tiene referencias locales, las sube una vez para sembrar el almacén compartido).
+async function loadRefs(){
+    refsData = cachedRefs(); renderRefList(); refreshPicker();   // mostrar caché al instante
+    if(!cfg.url) return;
+    try{
+      let list = await serverListRefs();
+      if(!list.length){
+        const local = cachedRefs();
+        if(local.length){
+          await api('/api/references/bulk',{method:'POST',body:JSON.stringify({references:local.map(({id,...r})=>r),mode:'if_empty'})});
+          list = await serverListRefs();
+        }
+      }
+      refsData = list; cacheRefs(); renderRefList(); refreshPicker();
+    }catch(e){ /* offline: se queda con la caché */ }
 }
 $('#refModalClose').onclick=()=>$('#refModal').classList.remove('show');
 $('#refModal').onclick=e=>{ if(e.target.id==='refModal') $('#refModal').classList.remove('show'); };
 $('#refExport').onclick=exportRefs;
 $('#refImport').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
-$('#refSave').onclick=()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } addRef({url,notes,text,images:[]}); toast('Referencia guardada','ok'); loadRefs(); };
+$('#refSave').onclick=async()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } await addRefServer({url,notes,text,images:[]}); toast('Referencia guardada','ok'); };
 // Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
 $('#refUpload').onchange=async(e)=>{
   const files=[...e.target.files]; if(!files.length) return;
@@ -463,7 +475,7 @@ $('#refUpload').onchange=async(e)=>{
   for(const f of files){ try{ const fd=new FormData(); fd.append('file',f);
     const r=await fetch(cfg.url.replace(/\/$/,'')+'/api/lovart/upload',{method:'POST',headers:{'X-App-Key':cfg.key},body:fd});
     const d=await r.json(); if(d.url) images.push(d.url); }catch(err){ st.textContent='Error: '+err.message; } }
-  if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; addRef({notes,images,text:'Fotos subidas'}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; loadRefs(); }
+  if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; await addRefServer({notes,images,text:'Fotos subidas'}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; }
 };
 $('#recBtn').onclick=async()=>{
   const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
@@ -472,6 +484,7 @@ $('#recBtn').onclick=async()=>{
   const reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
   const slides=+$('#recSlides').value||5, model=$('#model').value, tone=$('#tone').value;
   $('#recBtn').disabled=true; rlog.textContent=''; reclogln('▸ Recreando a tu estilo...');
+  if(url && !text){ reclogln('  ⚠ Ojo: no puedo abrir el link de Instagram. Para que quede fiel, pega el TEXTO de los slides arriba. Sin eso, lo recreo desde tu descripción/estilo.'); }
   try{ await buildOne(topic,slides,tone,model,reference,[],reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
   catch(e){ reclogln('  ✗ '+e.message); toast('Error: '+e.message,'err'); }
   $('#recBtn').disabled=false;
@@ -545,8 +558,8 @@ function slideHtml(car,s,i){
 function saveCarouselAsRef(car){
   const images=car.slides.filter(s=>s.image_url).map(s=>s.image_url);
   const text=car.slides.map((s,i)=>`${i+1}. ${s.title}: ${s.body}`).join('\n');
-  addRef({notes:car.hook||car.topic, text, images});
-  toast('★ Guardado como referencia','ok'); loadRefs();
+  addRefServer({notes:car.hook||car.topic, text, images});
+  toast('★ Guardado como referencia','ok');
 }
 
 // ---- aprobados ----
