@@ -95,6 +95,7 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
   <button class="tab" data-page="app">Aprobados <span class="badge" id="appBadge">0</span></button>
   <button class="tab" data-page="brand">Estilo &amp; Ref</button>
   <div class="spacer"></div>
+  <button class="icon-btn" id="clearBtn" title="Borrar los carruseles generados y aprobados (no toca tus referencias ni tu estilo)">🧹 Limpiar</button>
   <button class="icon-btn" id="cfgBtn">⚙ Config</button>
 </nav>
 
@@ -207,7 +208,12 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
   </div>
 
   <div class="card" style="padding:16px;margin-top:16px;">
-    <label>Mis referencias guardadas (swipe file)</label>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+      <label style="margin:0;flex:1;min-width:160px;">Mis referencias guardadas (swipe file)</label>
+      <button class="btn btn-ghost btn-sm" id="refExport">⬇ Exportar respaldo</button>
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;">⬆ Importar<input type="file" id="refImport" accept="application/json" style="display:none;"></label>
+    </div>
+    <div class="sub" style="margin-bottom:8px;">Se guardan en este navegador. Descarga un respaldo (JSON) para no perderlas nunca y poder llevarlas a otro equipo.</div>
     <div id="refList" style="margin-top:8px;"></div>
   </div>
 </section>
@@ -241,6 +247,10 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 
 <script>
 const SUGGESTED = ["Desinflamación: hábitos para bajar la inflamación","Movimiento consciente para empezar el día","Salud digestiva y energía","Rutina de movilidad para la espalda","Descanso y recuperación: dormir mejor","Alimentación antiinflamatoria sin complicarte","Respiración y manejo del estrés","Postura y trabajo de escritorio"];
+// Semilla durable de referencias: se incrusta en la app (aparece en cualquier equipo,
+// sin depender de localStorage). Se llena con los carruseles de Lovart de Jimmy.
+// Cada item: {notes:"nombre", images:["url", ...], text:"", url:""}
+const DEFAULT_REFS = [];
 const cfg = { url: localStorage.getItem('cs_url')||'https://carrusel-studio.onrender.com', key: localStorage.getItem('cs_key')||'carrusel-flowback-2026' };
 let accounts = [];       // [{id,name,platform}]
 let carousels = [];      // {id,topic,hook,caption,hashtags,slides:[{title,body,brief,image_url,thread_id,loading,error,editing}],decision,accounts:Set,sending,result}
@@ -263,6 +273,35 @@ async function api(path, opts={}) {
   return data;
 }
 
+// ---- Pool de concurrencia: corre tareas de a `limit` a la vez ----
+async function runPool(items, worker, limit=2){
+  const queue=[...items.entries()]; const running=[];
+  async function next(){ if(!queue.length) return; const [i,it]=queue.shift();
+    const p=Promise.resolve(worker(it,i)).finally(()=>{ running.splice(running.indexOf(p),1); }); running.push(p); await p; return next(); }
+  const starters=[]; for(let k=0;k<Math.min(limit,items.length);k++) starters.push(next());
+  await Promise.all(starters);
+}
+
+// ---- Persistencia del TRABAJO en curso (carruseles + decisiones) ----
+// Sobrevive a recargas de la página. Se guarda en el navegador.
+function persistWork(){
+  try{
+    const data=carousels.map(c=>({ id:c.id, topic:c.topic, hook:c.hook, caption:c.caption,
+      hashtags:c.hashtags, _editedCaption:c._editedCaption, decision:c.decision, accounts:[...c.accounts],
+      slides:c.slides.map(s=>({title:s.title,body:s.body,brief:s.brief,image_url:s.image_url,thread_id:s.thread_id,error:s.error})) }));
+    localStorage.setItem('cs_work', JSON.stringify({seq:idSeq,carousels:data}));
+  }catch(e){}
+}
+function restoreWork(){
+  try{
+    const raw=localStorage.getItem('cs_work'); if(!raw) return;
+    const d=JSON.parse(raw); if(!d||!Array.isArray(d.carousels)) return;
+    idSeq=d.seq||1;
+    carousels=d.carousels.map(c=>({ ...c, accounts:new Set(c.accounts||[]),
+      slides:(c.slides||[]).map(s=>({...s,loading:false,editing:false})), sending:false, result:null }));
+  }catch(e){}
+}
+
 // ---- navegación ----
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -274,6 +313,13 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 
 // ---- config ----
 $('#cfgBtn').onclick=()=>{ $('#cfgUrl').value=cfg.url; $('#cfgKey').value=cfg.key; $('#cfgStatus').textContent=''; $('#cfgModal').classList.add('show'); };
+// Limpiar trabajo (doble-tap de seguridad; no borra referencias ni estilo)
+let _clearArmed=false;
+$('#clearBtn').onclick=()=>{
+  if(!carousels.length){ toast('No hay trabajo que limpiar','ok'); return; }
+  if(!_clearArmed){ _clearArmed=true; toast('Toca “Limpiar” otra vez para borrar todo el trabajo','err'); setTimeout(()=>{_clearArmed=false;},3500); return; }
+  _clearArmed=false; carousels=[]; idSeq=1; try{localStorage.removeItem('cs_work');}catch(e){} renderRev(); renderApp(); toast('Trabajo limpiado','ok');
+};
 $('#cfgModal').onclick=e=>{ if(e.target.id==='cfgModal') $('#cfgModal').classList.remove('show'); };
 $('#cfgSave').onclick=()=>{ cfg.url=$('#cfgUrl').value.trim(); cfg.key=$('#cfgKey').value.trim(); localStorage.setItem('cs_url',cfg.url); localStorage.setItem('cs_key',cfg.key); $('#cfgModal').classList.remove('show'); toast('Configuración guardada','ok'); };
 $('#cfgTest').onclick=async()=>{ const s=$('#cfgStatus'); s.className='status'; s.textContent='Probando...'; cfg.url=$('#cfgUrl').value.trim(); cfg.key=$('#cfgKey').value.trim(); try{ const a=await api('/api/ghl/accounts'); s.className='status ok'; s.textContent='✓ Conectado. '+(a.accounts?.length||0)+' cuentas de GHL detectadas.'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
@@ -307,8 +353,8 @@ async function buildOne(topic, slides, tone, model, reference, attachments, log)
     slides:(copy.slides||[]).map((s,i)=>({title:s.title||'',body:s.body||'',brief:briefs[i]||s.title||topic,image_url:null,thread_id:null,loading:true,error:null,editing:false})),
     decision:'pending', accounts:new Set(), sending:false, result:null };
   carousels.unshift(car); renderRev();
-  log&&log('  · generando '+car.slides.length+' imágenes con Lovart...');
-  await Promise.all(car.slides.map(sl=>genSlide(car,sl,model,attachments)));
+  log&&log('  · generando '+car.slides.length+' imágenes con Lovart (de a 2)...');
+  await runPool(car.slides, sl=>genSlide(car,sl,model,attachments), 2);
   log&&log('  ✓ listo');
   return car;
 }
@@ -332,21 +378,64 @@ $('#genBtn').onclick=async()=>{
     catch(e){ logln('  ✗ error: '+e.message); toast('Error en "'+topic+'": '+e.message,'err'); }
   }
   $('#genBtn').disabled=false;
+  try{ const u=await api('/api/usage'); logln(`· uso de hoy: ${u.images_today}/${u.limits.images} imágenes · ${u.copy_today}/${u.limits.copy} copys`); }catch(e){}
   toast(`${qty} carrusel(es) generado(s). Revisa en “Revisar”.`,'ok');
   document.querySelector('.tab[data-page=rev]').click();
 };
 
 // ---- Estilo & Referencias ----
 const rlog=$('#recLog'); const reclogln=m=>{ rlog.classList.add('show'); rlog.textContent+=m+'\n'; rlog.scrollTop=rlog.scrollHeight; };
-async function loadBrand(){ try{ const d=await api('/api/brand'); $('#brandText').value=d.brand||''; }catch(e){ toast('No pude cargar el estilo: '+e.message,'err'); } }
-$('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='status'; s.textContent='Guardando...'; try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:$('#brandText').value})}); s.className='status ok'; s.textContent='✓ Estilo guardado'; }catch(e){ s.className='status err'; s.textContent='✗ '+e.message; } };
+async function loadBrand(){
+  const local=localStorage.getItem('cs_brand');
+  if(local!=null){
+    $('#brandText').value=local;
+    // Auto-restaurar en el servidor por si un redeploy borró el disco efímero
+    // (la generación de copy usa el estilo del servidor, no el del navegador).
+    try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:local})}); }catch(e){}
+    return;
+  }
+  try{ const d=await api('/api/brand'); $('#brandText').value=d.brand||''; }catch(e){ toast('No pude cargar el estilo: '+e.message,'err'); }
+}
+$('#brandSave').onclick=async()=>{ const s=$('#brandStatus'); s.className='status'; s.textContent='Guardando...'; const val=$('#brandText').value;
+  localStorage.setItem('cs_brand',val);   // respaldo local (sobrevive redeploys)
+  try{ await api('/api/brand',{method:'PUT',body:JSON.stringify({brand:val})}); s.className='status ok'; s.textContent='✓ Estilo guardado y respaldado'; }
+  catch(e){ s.className='status ok'; s.textContent='✓ Respaldado en el navegador (servidor no respondió: '+e.message+')'; } };
 // Referencias guardadas en el NAVEGADOR (localStorage): sobreviven a redeploys y reinicios del servidor.
 function getRefs(){ try{ return JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){ return []; } }
 function setRefs(r){ localStorage.setItem('cs_refs', JSON.stringify(r)); refsData=r; }
 function addRef(ref){ const r=getRefs(); ref.id=r.reduce((m,x)=>Math.max(m,x.id||0),0)+1; r.push(ref); setRefs(r); return ref; }
+// Si el navegador no tiene referencias y hay semilla incrustada, la carga (una vez).
+function seedRefsIfEmpty(){
+  if(!DEFAULT_REFS.length) return;
+  let cur=[]; try{ cur=JSON.parse(localStorage.getItem('cs_refs')||'[]'); }catch(e){}
+  if(cur.length) return;                                   // ya tiene referencias
+  if(localStorage.getItem('cs_refs_seeded')==='1') return; // ya se sembró antes (y las borró a propósito)
+  setRefs(DEFAULT_REFS.map((r,i)=>({url:'',text:'',images:[],notes:'',...r,id:i+1})));
+  localStorage.setItem('cs_refs_seeded','1');
+}
+// Exportar referencias como respaldo descargable (JSON).
+function exportRefs(){
+  const data=localStorage.getItem('cs_refs')||'[]';
+  const blob=new Blob([data],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='carrusel-studio-referencias.json'; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast('Respaldo descargado','ok');
+}
+// Importar referencias desde un JSON (mergea sin duplicar).
+function importRefs(file){
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const arr=JSON.parse(rd.result); if(!Array.isArray(arr)) throw new Error('el archivo no es una lista de referencias');
+    const cur=getRefs(); const seen=new Set(cur.map(r=>(r.images||[]).join('|')+'::'+(r.notes||'')));
+    let maxId=cur.reduce((m,x)=>Math.max(m,x.id||0),0), added=0;
+    arr.forEach(r=>{ const k=(r.images||[]).join('|')+'::'+(r.notes||''); if(seen.has(k))return; seen.add(k); maxId++; cur.push({url:'',text:'',images:[],notes:'',...r,id:maxId}); added++; });
+    setRefs(cur); loadRefs(); toast(added+' referencia(s) importada(s)','ok');
+  }catch(err){ toast('No pude importar: '+err.message,'err'); } };
+  rd.readAsText(file);
+}
 function refreshPicker(){ const pick=$('#refPick'); if(!pick) return; const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join(''); pick.value=cur; }
 function openRefViewer(ref){ if(!ref) return; $('#refModalTitle').textContent=ref.notes||'Referencia sin nombre'; $('#refModalBody').innerHTML=(ref.images&&ref.images.length)?ref.images.map(u=>`<img src="${esc(u)}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block;">`).join(''):'<span class="sub">Esta referencia no tiene imágenes.</span>'; $('#refModal').classList.add('show'); }
-function loadRefs(){ const box=$('#refList'); if(!box) return; refsData=getRefs(); refreshPicker();
+function loadRefs(){ const box=$('#refList'); if(!box) return; seedRefsIfEmpty(); refsData=getRefs(); refreshPicker();
     box.innerHTML=refsData.length?refsData.map(r=>`<div style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:6px;">
       ${(r.images&&r.images.length)?`<img src="${esc(r.images[0])}" loading="lazy" decoding="async" data-viewref="${r.id}" title="Ver" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--s3);cursor:zoom-in;">`:'<div style="width:48px;height:48px;border-radius:6px;background:var(--s3);flex-shrink:0;"></div>'}
       <div style="flex:1;min-width:0;">
@@ -363,6 +452,8 @@ function loadRefs(){ const box=$('#refList'); if(!box) return; refsData=getRefs(
 }
 $('#refModalClose').onclick=()=>$('#refModal').classList.remove('show');
 $('#refModal').onclick=e=>{ if(e.target.id==='refModal') $('#refModal').classList.remove('show'); };
+$('#refExport').onclick=exportRefs;
+$('#refImport').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
 $('#refSave').onclick=()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } addRef({url,notes,text,images:[]}); toast('Referencia guardada','ok'); loadRefs(); };
 // Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
 $('#refUpload').onchange=async(e)=>{
@@ -433,6 +524,7 @@ function renderRev(){
   list.querySelectorAll('[data-saveref]').forEach(b=>b.onclick=()=>saveCarouselAsRef(carousels.find(x=>x.id==b.dataset.saveref)));
   list.querySelectorAll('[data-edittoggle]').forEach(b=>b.onclick=()=>{const box=b.parentElement.querySelector('.slide-edit');box.style.display=box.style.display==='none'?'block':'none';});
   list.querySelectorAll('[data-editapply]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);const sl=c.slides[+b.dataset.slide];if(!sl.thread_id){toast('Regenera esta imagen primero para poder editarla','err');return;}const ta=b.parentElement.querySelector('textarea');editSlide(c,sl,$('#model').value,ta.value);});
+  persistWork();
 }
 function slideHtml(car,s,i){
   let inner;
@@ -504,6 +596,7 @@ function renderApp(){
     renderApp(); });
   list.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.back);c.decision='pending';c.result=null;renderApp();renderRev();});
   list.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>sendDraft(carousels.find(x=>x.id==b.dataset.send)));
+  persistWork();
 }
 
 async function sendDraft(car){
@@ -523,6 +616,7 @@ async function sendDraft(car){
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // init
+restoreWork();
 if(!cfg.url){ setTimeout(()=>$('#cfgBtn').click(),400); } else { loadRefs(); }
 renderRev(); renderApp();
 </script>

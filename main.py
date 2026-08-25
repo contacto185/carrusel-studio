@@ -24,7 +24,7 @@ from typing import Optional
 
 import tempfile
 
-from fastapi import FastAPI, Header, HTTPException, UploadFile, File
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ import lovart_client
 import ghl_client
 import copy_client
 import brand as brand_mod
+import ratelimit
 
 app = FastAPI(title="Carrusel Studio Backend", version="1.0.0")
 
@@ -122,8 +123,10 @@ def ghl_accounts(x_app_key: Optional[str] = Header(default=None)):
 
 
 @app.post("/api/copy")
-def api_copy(req: CopyReq, x_app_key: Optional[str] = Header(default=None)):
+def api_copy(req: CopyReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
+    ratelimit.check_budget("copy")
     try:
         return copy_client.generate_copy(req.topic, req.slides, req.tone, req.extra,
                                          reference=req.reference)
@@ -132,14 +135,23 @@ def api_copy(req: CopyReq, x_app_key: Optional[str] = Header(default=None)):
 
 
 @app.post("/api/lovart/generate")
-def api_image(req: ImageReq, x_app_key: Optional[str] = Header(default=None)):
+def api_image(req: ImageReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
+    ratelimit.check_budget("img")
     try:
         return lovart_client.generate_image(
             req.prompt, req.model, req.project_id, req.thread_id, req.attachments
         )
     except lovart_client.LovartError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/usage")
+def api_usage(x_app_key: Optional[str] = Header(default=None)):
+    """Uso del día (protección de créditos): imágenes y copys generados."""
+    _check_key(x_app_key)
+    return ratelimit.stats()
 
 
 @app.post("/api/lovart/confirm")
@@ -154,6 +166,7 @@ def api_confirm(req: ConfirmReq, x_app_key: Optional[str] = Header(default=None)
 def _build_carousel(topic: str, slides: int, tone: str, model: Optional[str],
                     reference: str = "", attachments: Optional[list[str]] = None) -> dict:
     """Genera el copy y una imagen por slide. Devuelve el carrusel completo."""
+    ratelimit.check_budget("copy")
     copy = copy_client.generate_copy(topic, slides, tone, reference=reference)
     briefs = copy.get("image_briefs") or []
     slide_texts = copy.get("slides") or []
@@ -167,6 +180,7 @@ def _build_carousel(topic: str, slides: int, tone: str, model: Optional[str],
             f"Sin ningún texto ni letras en la imagen."
         )
         try:
+            ratelimit.check_budget("img")
             img = lovart_client.generate_image(prompt, model, attachments=attachments)
             image_url = img["image_urls"][0] if img.get("image_urls") else None
             warning = img.get("warning")
@@ -189,8 +203,9 @@ def _build_carousel(topic: str, slides: int, tone: str, model: Optional[str],
 
 
 @app.post("/api/carousel/generate")
-def api_carousel(req: CarouselReq, x_app_key: Optional[str] = Header(default=None)):
+def api_carousel(req: CarouselReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
     try:
         return _build_carousel(req.topic, req.slides, req.tone, req.model)
     except (copy_client.CopyError, lovart_client.LovartError) as e:
@@ -198,8 +213,9 @@ def api_carousel(req: CarouselReq, x_app_key: Optional[str] = Header(default=Non
 
 
 @app.post("/api/carousel/batch")
-def api_batch(req: BatchReq, x_app_key: Optional[str] = Header(default=None)):
+def api_batch(req: BatchReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
     results = []
     for topic in req.topics:
         try:
@@ -260,9 +276,10 @@ def api_add_ref(req: RefReq, x_app_key: Optional[str] = Header(default=None)):
 
 
 @app.post("/api/lovart/upload")
-async def api_upload(file: UploadFile = File(...), x_app_key: Optional[str] = Header(default=None)):
+async def api_upload(request: Request, file: UploadFile = File(...), x_app_key: Optional[str] = Header(default=None)):
     """Sube una imagen (ej. foto de Jimmy/Kira) a Lovart y devuelve su URL para usar de referencia."""
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
     try:
         suffix = _Path(file.filename or "img.png").suffix or ".png"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -293,8 +310,9 @@ class RecreateReq(BaseModel):
 
 
 @app.post("/api/carousel/recreate")
-def api_recreate(req: RecreateReq, x_app_key: Optional[str] = Header(default=None)):
+def api_recreate(req: RecreateReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
     _check_key(x_app_key)
+    ratelimit.check_ip(request)
     reference = (f"URL de referencia: {req.url}\n"
                  f"Qué me gusta / notas: {req.notes}\n"
                  f"Texto de los slides (si se pegó):\n{req.text}").strip()

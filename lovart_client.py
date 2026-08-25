@@ -19,8 +19,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-# Ruta al cliente oficial de Lovart (vendido dentro del repo).
-AGENT_SKILL = str(Path(__file__).parent / "vendor" / "agent_skill.py")
+# Ruta al cliente oficial de Lovart. Soporta ambos layouts:
+#  - despliegue plano (agent_skill.py junto a este archivo)
+#  - local con vendor/ (agent_skill.py dentro de vendor/)
+_AS_ROOT = Path(__file__).parent / "agent_skill.py"
+_AS_VENDOR = Path(__file__).parent / "vendor" / "agent_skill.py"
+AGENT_SKILL = str(_AS_ROOT if _AS_ROOT.exists() else _AS_VENDOR)
 
 # Modelo de imagen por defecto. Ver la tabla completa en vendor/LOVART_SKILL.md.
 DEFAULT_IMAGE_MODEL = os.getenv("LOVART_IMAGE_MODEL", "generate_image_seedream_v5_pro")
