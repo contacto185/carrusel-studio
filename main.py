@@ -36,6 +36,7 @@ import copy_client
 import brand as brand_mod
 import ratelimit
 import refs_store
+import ig_client
 
 app = FastAPI(title="Carrusel Studio Backend", version="1.0.0")
 
@@ -145,6 +146,43 @@ def api_image(req: ImageReq, request: Request, x_app_key: Optional[str] = Header
             req.prompt, req.model, req.project_id, req.thread_id, req.attachments
         )
     except lovart_client.LovartError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ---------- Leer un carrusel de Instagram (link + capturas) ----------
+class LinkReq(BaseModel):
+    url: str
+
+
+@app.post("/api/ig/read")
+def api_ig_read(req: LinkReq, request: Request, x_app_key: Optional[str] = Header(default=None)):
+    """Intenta leer el caption/descripción pública de un post de Instagram u otro link."""
+    _check_key(x_app_key)
+    ratelimit.check_ip(request)
+    try:
+        return ig_client.read_link(req.url)
+    except ig_client.IGError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/ig/read-images")
+async def api_ig_read_images(request: Request,
+                             files: list[UploadFile] = File(...),
+                             x_app_key: Optional[str] = Header(default=None)):
+    """Lee capturas del carrusel con visión (Claude) y devuelve el texto de cada slide."""
+    _check_key(x_app_key)
+    ratelimit.check_ip(request)
+    ratelimit.check_budget("copy")
+    try:
+        images = []
+        for f in files:
+            raw = await f.read()
+            mt = f.content_type or "image/png"
+            if mt not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
+                mt = "image/png"
+            images.append((mt, raw))
+        return ig_client.read_images(images)
+    except ig_client.IGError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
 

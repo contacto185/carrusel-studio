@@ -85,6 +85,18 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 .toast.show{transform:translateY(0);opacity:1;}
 .toast.ok{border-color:rgba(110,231,168,.4);color:var(--green);}
 .toast.err{border-color:rgba(255,96,96,.4);color:var(--red);}
+/* modos de generación */
+.modes{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+.mode{background:var(--s1);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:9px 16px;font-size:12px;cursor:pointer;font-family:inherit;transition:.2s;}
+.mode:hover{border-color:var(--gold-dim);color:var(--text);}
+.mode.active{border-color:var(--gold);color:var(--gold);background:var(--glow);}
+.drop{border:1.5px dashed var(--border);border-radius:var(--r);padding:16px;text-align:center;font-size:12px;color:var(--muted);transition:.2s;background:var(--s1);}
+.drop.over{border-color:var(--gold);background:var(--glow);color:var(--text);}
+/* edición de textos en Revisar */
+.slide .t-in{width:100%;font-size:10px;padding:4px 6px;line-height:1.3;background:var(--s2);border:1px solid transparent;border-radius:5px;color:var(--text);font-family:inherit;resize:vertical;}
+.slide .t-in:hover{border-color:var(--border);}
+.slide .t-in:focus{border-color:var(--gold-dim);background:var(--s1);}
+.slide .lbl{font-size:8px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin:5px 0 2px;}
 </style>
 </head>
 <body>
@@ -102,22 +114,62 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 <!-- GENERAR -->
 <section class="page active" id="page-gen">
   <h2>Generar carruseles</h2>
-  <p class="sub">Escribe uno o varios temas (uno por línea). Para cada tema creo el copy con Claude y las imágenes con Lovart. Después los revisas y apruebas.</p>
+  <p class="sub">Elige cómo quieres partir: desde un tema tuyo, o recreando un carrusel que te gustó — siempre con tu estilo Flowback.</p>
+
+  <div class="modes">
+    <button class="mode active" data-mode="tema">✍️ Desde un tema</button>
+    <button class="mode" data-mode="recrear">🔗 Recrear un carrusel</button>
+  </div>
+
   <div class="row">
-    <div class="col" style="flex:2;min-width:280px;">
-      <label>Prompt del carrusel — describe el tema (uno por línea para varios)</label>
-      <textarea id="topics" placeholder="Ej: Ansiedad: 3 señales de tu cuerpo&#10;O más detallado: Carrusel con una foto mía entrenando en casa, tema desinflamación, tono cercano"></textarea>
-      <div class="chips" id="suggested"></div>
-      <label style="margin-top:12px;">Adjuntar imagen (opcional) — foto tuya, de Kira, o de referencia para este carrusel</label>
+    <div class="col" style="flex:2;min-width:290px;">
+
+      <!-- MODO TEMA -->
+      <div id="modeTema">
+        <label>Tema del carrusel (uno por línea para generar varios)</label>
+        <textarea id="topics" placeholder="Ej: Ansiedad: 3 señales de tu cuerpo&#10;Desinflamación: qué comer en la semana"></textarea>
+        <div class="chips" id="suggested"></div>
+      </div>
+
+      <!-- MODO RECREAR -->
+      <div id="modeRecrear" style="display:none;">
+        <label>1 · Pega el link del carrusel (Instagram u otro)</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="recUrl" placeholder="https://www.instagram.com/p/..." style="flex:1;">
+          <button class="btn btn-ghost btn-sm" id="recReadUrl" style="white-space:nowrap;">Leer link</button>
+        </div>
+
+        <label style="margin-top:12px;">2 · Adjunta capturas del carrusel <b>(lo más importante)</b></label>
+        <div id="shotDrop" class="drop">
+          <b>Arrastra aquí las capturas</b> · o pégalas con <b>⌘V</b> · o
+          <label style="color:var(--gold);cursor:pointer;text-decoration:underline;">elígelas<input type="file" id="recShots" accept="image/*" multiple style="display:none;"></label>
+          <div class="sub" style="margin-top:5px;">Así leo el texto real de cada slide y lo recreo de verdad. En Mac: <b>⌘⇧4</b> para capturar.</div>
+        </div>
+        <div id="shotThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+        <div class="status" id="recReadStatus" style="margin-top:6px;"></div>
+
+        <label style="margin-top:12px;">3 · Contenido leído (edítalo si quieres)</label>
+        <textarea id="recText" placeholder="Aquí aparece el texto de los slides una vez que leo el link o las capturas."></textarea>
+
+        <label style="margin-top:10px;">¿Qué te gustó de él? (opcional)</label>
+        <input type="text" id="recNotes" placeholder="Ej: el ranking por proteína, formato infografía">
+        <label style="margin-top:10px;">Tema (opcional — si lo dejas vacío lo deduzco)</label>
+        <input type="text" id="recTopic" placeholder="se deduce del contenido leído">
+      </div>
+
+      <label style="margin-top:14px;">Adjuntar foto tuya / de Kira (opcional) — para que salga en las imágenes</label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">📎 Adjuntar imagen<input type="file" id="genImg" accept="image/*" multiple style="display:none;"></label>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">📎 Adjuntar foto<input type="file" id="genImg" accept="image/*" multiple style="display:none;"></label>
         <span class="status" id="genImgStatus"></span>
       </div>
       <div id="genImgThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
     </div>
+
     <div class="col">
-      <label>Cantidad de carruseles</label>
-      <input type="number" id="qty" value="1" min="1" max="20">
+      <div id="qtyBox">
+        <label>Cantidad de carruseles</label>
+        <input type="number" id="qty" value="1" min="1" max="20">
+      </div>
       <label style="margin-top:12px;">Slides por carrusel</label>
       <input type="number" id="slides" value="5" min="3" max="10">
       <label style="margin-top:12px;">Tono</label>
@@ -129,23 +181,20 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
         <option value="generate_image_gpt_image_2">GPT Image 2</option>
         <option value="generate_image_seedream_v4_5">Seedream 4.5</option>
       </select>
-    </div>
-  </div>
-  <div class="row" style="align-items:flex-end;">
-    <div class="col" style="flex:2;">
-      <label>Usar una referencia de ejemplo (opcional)</label>
+      <label style="margin-top:12px;">Estilo: usar uno de MIS carruseles</label>
       <select id="refPick"><option value="">— Sin referencia —</option></select>
-      <div class="sub" id="refPickInfo" style="margin:6px 0 0;">Elige una referencia guardada (estilo, o fotos de Jimmy/Kira) y la usaré como ejemplo visual y de estructura.</div>
+      <div class="sub" style="margin-top:5px;">Uso sus imágenes como guía de estética Flowback.</div>
     </div>
   </div>
-  <button class="btn" id="genBtn">Generar lote</button>
+
+  <button class="btn" id="genBtn">Generar</button>
   <div class="log" id="genLog"></div>
 </section>
 
 <!-- REVISAR -->
 <section class="page" id="page-rev">
   <h2>Revisar y aprobar</h2>
-  <p class="sub">Marca <b>Sí</b> los carruseles que te gustan (pasan a “Aprobados”) o <b>No</b> para descartarlos. Puedes regenerar una imagen que no te convenza.</p>
+  <p class="sub">Edita el <b>título y el texto</b> de cada slide directamente (se guarda solo). <b>↻ Imagen</b> la regenera y <b>✎ Ajustar</b> le pide un cambio. Después marca <b>Sí</b> o <b>No</b>.</p>
   <div id="revList"></div>
   <div class="empty" id="revEmpty">Aún no hay carruseles generados.</div>
 </section>
@@ -161,7 +210,7 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
 <!-- ESTILO & REFERENCIAS -->
 <section class="page" id="page-brand">
   <h2>Estilo &amp; Referencias</h2>
-  <p class="sub">Aquí el sistema aprende <b>tu</b> línea. El perfil de marca se usa en cada carrusel (copy e imágenes) para que no salga cualquier cosa. Y puedes recrear un carrusel que te gustó, a tu estilo.</p>
+  <p class="sub">Aquí el sistema aprende <b>tu</b> línea. El perfil de marca se usa en cada carrusel (copy e imágenes) para que no salga cualquier cosa, y tus referencias son el estilo que puedes elegir al generar.</p>
 
   <div class="card" style="padding:16px;">
     <label>Perfil de marca “Estilo Jimmy” (editable)</label>
@@ -170,34 +219,6 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
       <button class="btn btn-sm" id="brandSave">Guardar estilo</button>
       <span class="status" id="brandStatus" style="align-self:center;"></span>
     </div>
-  </div>
-
-  <div class="card" style="padding:16px;margin-top:16px;">
-    <h2 style="font-size:16px;">Recrear desde un link</h2>
-    <p class="sub" style="margin-bottom:14px;">Pega un carrusel de Instagram que te gustó. Lo recreo con tu estilo (no lo copio: tomo el ángulo y lo hago tuyo). Consejo: pega también el texto de los slides para que quede más fiel.</p>
-    <div class="row">
-      <div class="col" style="flex:2;min-width:260px;">
-        <label>Link del carrusel (Instagram u otro)</label>
-        <input type="text" id="recUrl" placeholder="https://www.instagram.com/p/...">
-        <label style="margin-top:10px;">¿Qué te gusta de él? (ángulo, formato, idea)</label>
-        <input type="text" id="recNotes" placeholder="Ej: el ranking de alimentos por proteína, formato infografía">
-        <label style="margin-top:10px;">Texto de los slides (opcional, pégalo para mayor fidelidad)</label>
-        <textarea id="recText" placeholder="Slide 1: ...&#10;Slide 2: ..."></textarea>
-        <label style="margin-top:10px;">Usar uno de MIS carruseles como estilo (opcional)</label>
-        <select id="recRefPick"><option value="">— Sin referencia de estilo —</option></select>
-        <div class="sub" style="margin-top:4px;">Elige un carrusel tuyo: uso sus imágenes como guía de estética Flowback al recrear el del link.</div>
-      </div>
-      <div class="col">
-        <label>Tema (opcional)</label>
-        <input type="text" id="recTopic" placeholder="se deduce de tus notas">
-        <label style="margin-top:10px;">Slides</label>
-        <input type="number" id="recSlides" value="5" min="3" max="10">
-        <label style="margin-top:10px;">Guardar como referencia</label>
-        <button class="btn btn-ghost btn-sm" id="refSave" style="width:100%;">＋ Guardar en mis referencias</button>
-      </div>
-    </div>
-    <button class="btn" id="recBtn">Recrear en mi estilo</button>
-    <div class="log" id="recLog"></div>
   </div>
 
   <div class="card" style="padding:16px;margin-top:16px;">
@@ -359,32 +380,115 @@ async function buildOne(topic, slides, tone, model, reference, attachments, log)
   return car;
 }
 
+// ---- Modos de generación: tema / recrear ----
+let genMode='tema';
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.mode').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); genMode=b.dataset.mode;
+  $('#modeTema').style.display   = genMode==='tema'    ? 'block':'none';
+  $('#modeRecrear').style.display= genMode==='recrear' ? 'block':'none';
+  $('#qtyBox').style.display     = genMode==='tema'    ? 'block':'none';
+  $('#genBtn').textContent       = genMode==='tema'    ? 'Generar' : 'Recrear en mi estilo';
+});
+
+// ---- Recrear: leer el LINK ----
+$('#recReadUrl').onclick=async()=>{
+  const url=$('#recUrl').value.trim();
+  if(!url){ toast('Pega primero el link','err'); return; }
+  const st=$('#recReadStatus'); st.className='status'; st.textContent='Leyendo el link…';
+  try{
+    const d=await api('/api/ig/read',{method:'POST',body:JSON.stringify({url})});
+    if(d.ok && (d.caption||d.title)){
+      const cur=$('#recText').value.trim();
+      const add=[d.title,d.caption].filter(Boolean).join('\n');
+      $('#recText').value = cur ? cur+'\n\n--- del link ---\n'+add : add;
+      st.className='status ok'; st.textContent='✓ Leí la descripción del post. Para el texto DENTRO de los slides, adjunta capturas.';
+    } else {
+      st.className='status err';
+      st.textContent='Instagram no deja leer el post desde fuera. Adjunta capturas del carrusel 👇 (así leo el texto real de cada slide).';
+    }
+  }catch(e){
+    st.className='status err';
+    st.textContent='No pude leer el link ('+e.message+'). Adjunta capturas del carrusel 👇';
+  }
+};
+
+// ---- Recrear: leer CAPTURAS con visión ----
+let shotFiles=[];
+function renderShots(){
+  const box=$('#shotThumbs');
+  box.innerHTML=shotFiles.map((f,i)=>`<div style="position:relative;"><img src="${URL.createObjectURL(f)}" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);"><span data-rmshot="${i}" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border-radius:50%;width:17px;height:17px;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</span></div>`).join('');
+  box.querySelectorAll('[data-rmshot]').forEach(b=>b.onclick=()=>{ shotFiles.splice(+b.dataset.rmshot,1); renderShots(); });
+}
+async function readShots(){
+  if(!shotFiles.length) return;
+  const st=$('#recReadStatus'); st.className='status'; st.textContent=`Leyendo ${shotFiles.length} captura(s) con visión…`;
+  try{
+    const fd=new FormData(); shotFiles.forEach(f=>fd.append('files',f));
+    const r=await fetch(cfg.url.replace(/\/$/,'')+'/api/ig/read-images',{method:'POST',headers:{'X-App-Key':cfg.key},body:fd});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||('HTTP '+r.status));
+    const txt=(d.slides||[]).map((s,i)=>`Slide ${i+1}: ${s}`).join('\n');
+    $('#recText').value=txt;
+    if(d.tema && !$('#recTopic').value.trim()) $('#recTopic').value=d.tema;
+    if((d.angulo||d.formato) && !$('#recNotes').value.trim()) $('#recNotes').value=[d.angulo,d.formato].filter(Boolean).join(' · ');
+    st.className='status ok'; st.textContent=`✓ Leí ${(d.slides||[]).length} slides. Revisa el texto y dale a Recrear.`;
+  }catch(e){ st.className='status err'; st.textContent='No pude leer las capturas: '+e.message; }
+}
+function addShots(files){
+  const imgs=[...files].filter(f=>f.type.startsWith('image/'));
+  if(!imgs.length) return;
+  shotFiles=shotFiles.concat(imgs).slice(0,12); renderShots(); readShots();
+}
+$('#recShots').onchange=e=>{ addShots(e.target.files); e.target.value=''; };
+const drop=$('#shotDrop');
+drop.addEventListener('dragover',e=>{ e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('over'); addShots(e.dataTransfer.files); });
+document.addEventListener('paste',e=>{
+  if(genMode!=='recrear' || !$('#page-gen').classList.contains('active')) return;
+  const items=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/'));
+  if(!items.length) return;
+  e.preventDefault(); addShots(items.map(i=>i.getAsFile()).filter(Boolean));
+});
+
+// ---- Generar (ambos modos) ----
 $('#genBtn').onclick=async()=>{
-  let topics=$('#topics').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  const ref=refsData.find(r=>String(r.id)===$('#refPick').value);
-  if(!topics.length && ref) topics=[ref.notes||ref.topic||'Idea inspirada en la referencia'];
-  if(!topics.length){ toast('Escribe al menos un tema (o elige una referencia)','err'); return; }
   if(!cfg.url){ toast('Configura el backend primero (⚙)','err'); $('#cfgBtn').click(); return; }
-  const qty=Math.max(1,Math.min(+$('#qty').value||1,20));
+  const ref=refsData.find(r=>String(r.id)===$('#refPick').value);
   const slides=+$('#slides').value||5, tone=$('#tone').value, model=$('#model').value;
-  const reference=ref?`URL: ${ref.url||''}\nNotas: ${ref.notes||''}\nTexto: ${ref.text||''}`:'';
-  const attachments=[...(ref?(ref.images||[]):[]), ...genAttachments];
+  const styleImgs=ref?(ref.images||[]):[];
+  const attachments=[...styleImgs, ...genAttachments];
+  const styleBlock=ref?`\n\nESTILO A USAR (estética de MI carrusel "${ref.notes||('#'+ref.id)}"): sus imágenes van adjuntas como guía visual. Hazlo bien Flowback.`:'';
+
+  let jobs=[];   // [{topic, reference}]
+  if(genMode==='tema'){
+    let topics=$('#topics').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(!topics.length){ toast('Escribe al menos un tema','err'); return; }
+    const qty=Math.max(1,Math.min(+$('#qty').value||1,20));
+    for(let i=0;i<qty;i++) jobs.push({topic:topics[i%topics.length], reference:styleBlock});
+  } else {
+    const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
+    if(!text && !notes){ toast('Adjunta capturas (o describe qué te gustó) para poder recrearlo','err'); return; }
+    const topic=$('#recTopic').value.trim()||notes||'Idea inspirada en la referencia';
+    const reference=`CARRUSEL DE REFERENCIA (recréalo con MI estilo, no lo copies textual):\nURL: ${url}\nQué me gustó: ${notes}\nContenido de los slides:\n${text}`+styleBlock;
+    jobs.push({topic, reference});
+  }
+
   $('#genBtn').disabled=true; glog.textContent='';
-  if(ref) logln('★ usando referencia: '+(ref.notes||ref.url||('#'+ref.id))+(attachments.length?` (+${attachments.length} img)`:''));
-  for(let i=0;i<qty;i++){
-    const topic=topics[i%topics.length];
-    logln(`▸ [${i+1}/${qty}] ${topic}`);
-    try{ await buildOne(topic,slides,tone,model,reference,attachments,logln); }
-    catch(e){ logln('  ✗ error: '+e.message); toast('Error en "'+topic+'": '+e.message,'err'); }
+  if(ref) logln('★ estilo: '+(ref.notes||('#'+ref.id))+(attachments.length?` (+${attachments.length} img)`:''));
+  for(let i=0;i<jobs.length;i++){
+    logln(`▸ [${i+1}/${jobs.length}] ${jobs[i].topic}`);
+    try{ await buildOne(jobs[i].topic,slides,tone,model,jobs[i].reference,attachments,logln); }
+    catch(e){ logln('  ✗ error: '+e.message); toast('Error: '+e.message,'err'); }
   }
   $('#genBtn').disabled=false;
   try{ const u=await api('/api/usage'); logln(`· uso de hoy: ${u.images_today}/${u.limits.images} imágenes · ${u.copy_today}/${u.limits.copy} copys`); }catch(e){}
-  toast(`${qty} carrusel(es) generado(s). Revisa en “Revisar”.`,'ok');
+  toast(`Listo. Revísalo en “Revisar”.`,'ok');
   document.querySelector('.tab[data-page=rev]').click();
 };
 
 // ---- Estilo & Referencias ----
-const rlog=$('#recLog'); const reclogln=m=>{ rlog.classList.add('show'); rlog.textContent+=m+'\n'; rlog.scrollTop=rlog.scrollHeight; };
 async function loadBrand(){
   const local=localStorage.getItem('cs_brand');
   if(local!=null){
@@ -433,7 +537,6 @@ function importRefs(file){
 function refreshPicker(){
   const items=refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
   const pick=$('#refPick'); if(pick){ const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+items; pick.value=cur; }
-  const rec=$('#recRefPick'); if(rec){ const cur=rec.value; rec.innerHTML='<option value="">— Sin referencia de estilo —</option>'+items; rec.value=cur; }
 }
 function openRefViewer(ref){ if(!ref) return; $('#refModalTitle').textContent=ref.notes||'Referencia sin nombre'; $('#refModalBody').innerHTML=(ref.images&&ref.images.length)?ref.images.map(u=>`<img src="${esc(u)}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block;">`).join(''):'<span class="sub">Esta referencia no tiene imágenes.</span>'; $('#refModal').classList.add('show'); }
 // Render de la lista (sin fetch).
@@ -473,7 +576,6 @@ $('#refModalClose').onclick=()=>$('#refModal').classList.remove('show');
 $('#refModal').onclick=e=>{ if(e.target.id==='refModal') $('#refModal').classList.remove('show'); };
 $('#refExport').onclick=exportRefs;
 $('#refImport').onchange=e=>{ const f=e.target.files[0]; if(f) importRefs(f); e.target.value=''; };
-$('#refSave').onclick=async()=>{ const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim(); if(!url&&!notes){ toast('Pon al menos el link o una nota','err'); return; } await addRefServer({url,notes,text,images:[]}); toast('Referencia guardada','ok'); };
 // Subir foto (Jimmy/Kira) como referencia visual → se sube a Lovart y se guarda como referencia con imagen
 $('#refUpload').onchange=async(e)=>{
   const files=[...e.target.files]; if(!files.length) return;
@@ -484,48 +586,59 @@ $('#refUpload').onchange=async(e)=>{
     const d=await r.json(); if(d.url) images.push(d.url); }catch(err){ st.textContent='Error: '+err.message; } }
   if(images.length){ const notes=$('#refUpName').value.trim()||'Fotos de referencia'; await addRefServer({notes,images,text:'Fotos subidas'}); st.className='status ok'; st.textContent='✓ '+images.length+' imagen(es) guardadas como referencia'; $('#refUpload').value=''; }
 };
-$('#recBtn').onclick=async()=>{
-  const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
-  if(!url&&!notes&&!text){ toast('Pega un link o describe qué te gustó','err'); return; }
-  const styleRef=refsData.find(r=>String(r.id)===$('#recRefPick').value);
-  const topic=$('#recTopic').value.trim()||notes||'Idea inspirada en la referencia';
-  let reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
-  if(styleRef){ reference+=`\n\nESTILO A USAR (estética de MI carrusel, hazlo bien Flowback): "${styleRef.notes||('#'+styleRef.id)}". Sus imágenes van adjuntas como guía visual.`; }
-  const attachments=styleRef?(styleRef.images||[]):[];
-  const slides=+$('#recSlides').value||5, model=$('#model').value, tone=$('#tone').value;
-  $('#recBtn').disabled=true; rlog.textContent=''; reclogln('▸ Recreando a tu estilo...');
-  if(styleRef) reclogln('★ estilo de referencia: '+(styleRef.notes||('#'+styleRef.id))+(attachments.length?` (+${attachments.length} img)`:''));
-  if(url && !text){ reclogln('  ⚠ Ojo: no puedo abrir el link de Instagram. Para que quede fiel, pega el TEXTO de los slides arriba. Sin eso, lo recreo desde tu descripción/estilo.'); }
-  try{ await buildOne(topic,slides,tone,model,reference,attachments,reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
-  catch(e){ reclogln('  ✗ '+e.message); toast('Error: '+e.message,'err'); }
-  $('#recBtn').disabled=false;
-};
 
-async function genSlide(car,sl,model,attachments){
-  sl.loading=true; sl.error=null; renderRev();
-  try{
-    const body={prompt:sl.brief,model}; if(attachments&&attachments.length) body.attachments=attachments;
-    const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify(body)});
-    sl.image_url=(r.image_urls&&r.image_urls[0])||null;
-    sl.thread_id=r.thread_id||sl.thread_id;
-    if(!sl.image_url) sl.error=r.warning||'sin imagen';
-  }catch(e){ sl.error=e.message; }
-  sl.loading=false; renderRev();
+// Actualiza SOLO el marco de un slide (imagen/spinner/error), sin tocar lo que
+// estás escribiendo. Antes se redibujaba toda la pantalla y por eso se perdía la edición.
+function updateSlideFrame(car,i){
+  const el=document.getElementById(`sl-${car.id}-${i}`);
+  if(el){
+    const frame=el.querySelector('.frame');
+    if(frame) frame.innerHTML=`<span class="num">${i+1}</span>`+frameInner(car.slides[i]);
+  }
+  saveWork();
 }
-// Editar una imagen: continúa el thread de Lovart con el cambio pedido.
+function frameInner(s){
+  if(s.loading) return `<div class="mini-spin"></div>`;
+  if(s.image_url) return `<img src="${s.image_url}" loading="lazy" decoding="async">`;
+  return `<div style="font-size:9px;color:var(--red);padding:6px;text-align:center;line-height:1.3">${esc((s.error||'sin imagen').slice(0,120))}</div>`;
+}
+
+// Genera la imagen de un slide (con 1 reintento automático si Lovart falla).
+async function genSlide(car,sl,model,attachments){
+  const i=car.slides.indexOf(sl);
+  sl.loading=true; sl.error=null; updateSlideFrame(car,i);
+  for(let intento=1; intento<=2; intento++){
+    try{
+      const body={prompt:sl.brief,model}; if(attachments&&attachments.length) body.attachments=attachments;
+      const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify(body)});
+      if(r.image_urls&&r.image_urls[0]){
+        sl.image_url=r.image_urls[0]; sl.thread_id=r.thread_id||sl.thread_id; sl.error=null;
+        sl.loading=false; updateSlideFrame(car,i); return;
+      }
+      sl.error=r.warning||'Lovart no devolvió imagen';
+    }catch(e){ sl.error=e.message; }
+    if(intento===1){ sl.error='reintentando…'; updateSlideFrame(car,i); }
+  }
+  sl.loading=false; updateSlideFrame(car,i);
+}
+// Edita la imagen. Si hay thread de Lovart, continúa ese hilo; si no (p.ej. falló),
+// genera de nuevo combinando el brief original con el cambio pedido.
 async function editSlide(car,sl,model,change){
-  if(!change.trim()) return;
-  sl.loading=true; sl.error=null; sl.editing=false; renderRev();
+  change=(change||'').trim(); if(!change) { toast('Escribe qué quieres cambiar','err'); return; }
+  const i=car.slides.indexOf(sl);
+  sl.loading=true; sl.error=null; updateSlideFrame(car,i);
   try{
-    const body={prompt:change,model,thread_id:sl.thread_id};
+    const body=sl.thread_id ? {prompt:change,model,thread_id:sl.thread_id}
+                            : {prompt:`${sl.brief}. Cambio pedido: ${change}. Sin ningún texto ni letras en la imagen.`,model};
     const r=await api('/api/lovart/generate',{method:'POST',body:JSON.stringify(body)});
     if(r.image_urls&&r.image_urls[0]){ sl.image_url=r.image_urls[0]; sl.thread_id=r.thread_id||sl.thread_id; }
     else sl.error=r.warning||'no se pudo editar';
   }catch(e){ sl.error=e.message; }
-  sl.loading=false; renderRev();
+  sl.loading=false; updateSlideFrame(car,i);
 }
 
 // ---- revisar ----
+const saveWork=(()=>{ let t; return ()=>{ clearTimeout(t); t=setTimeout(persistWork,400); }; })();
 function renderRev(){
   const pend=carousels.filter(c=>c.decision==='pending');
   $('#revBadge').textContent=pend.length;
@@ -534,35 +647,47 @@ function renderRev(){
   const list=$('#revList'); list.innerHTML='';
   pend.forEach(car=>{
     const el=document.createElement('div'); el.className='card';
-    el.innerHTML=`<div class="card-head"><div class="t"><div class="hook">${esc(car.hook)}</div><div class="topic">${esc(car.topic)}</div></div>
+    el.innerHTML=`<div class="card-head"><div class="t">
+        <input class="hook" data-hook="${car.id}" value="${esc(car.hook)}" style="width:100%;background:transparent;border:1px solid transparent;padding:3px 5px;">
+        <div class="topic">${esc(car.topic)}</div></div>
       <button class="btn btn-ghost btn-sm" data-saveref="${car.id}">★ Guardar ref</button>
       <button class="btn btn-sm" data-yes="${car.id}">✓ Sí</button>
       <button class="btn btn-sm btn-no" data-no="${car.id}">✕ No</button></div>
       <div class="strip">${car.slides.map((s,i)=>slideHtml(car,s,i)).join('')}</div>
-      <div class="card-foot"><div class="caption">${esc(car.caption)}</div></div>`;
+      <div style="padding:10px 16px;border-top:1px solid var(--border);">
+        <div class="lbl" style="font-size:8px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px;">Caption del post</div>
+        <textarea data-cap2="${car.id}" style="min-height:60px;font-size:12px;">${esc(car.caption)}</textarea>
+      </div>`;
     list.appendChild(el);
   });
+  // decisiones
   list.querySelectorAll('[data-yes]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.yes);c.decision='yes';renderRev();renderApp();toast('Aprobado → pestaña Aprobados','ok');});
   list.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.no);c.decision='no';renderRev();});
-  list.querySelectorAll('[data-regen]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);genSlide(c,c.slides[+b.dataset.slide],$('#model').value);});
   list.querySelectorAll('[data-saveref]').forEach(b=>b.onclick=()=>saveCarouselAsRef(carousels.find(x=>x.id==b.dataset.saveref)));
-  list.querySelectorAll('[data-edittoggle]').forEach(b=>b.onclick=()=>{const box=b.parentElement.querySelector('.slide-edit');box.style.display=box.style.display==='none'?'block':'none';});
-  list.querySelectorAll('[data-editapply]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);const sl=c.slides[+b.dataset.slide];if(!sl.thread_id){toast('Regenera esta imagen primero para poder editarla','err');return;}const ta=b.parentElement.querySelector('textarea');editSlide(c,sl,$('#model').value,ta.value);});
+  // textos editables (se guardan solos)
+  list.querySelectorAll('[data-hook]').forEach(inp=>inp.oninput=()=>{ const c=carousels.find(x=>x.id==inp.dataset.hook); if(c){ c.hook=inp.value; saveWork(); } });
+  list.querySelectorAll('[data-cap2]').forEach(ta=>ta.oninput=()=>{ const c=carousels.find(x=>x.id==ta.dataset.cap2); if(c){ c.caption=ta.value; c._editedCaption=undefined; saveWork(); } });
+  list.querySelectorAll('[data-stitle]').forEach(ta=>ta.oninput=()=>{ const c=carousels.find(x=>x.id==ta.dataset.car); if(c){ c.slides[+ta.dataset.slide].title=ta.value; saveWork(); } });
+  list.querySelectorAll('[data-sbody]').forEach(ta=>ta.oninput=()=>{ const c=carousels.find(x=>x.id==ta.dataset.car); if(c){ c.slides[+ta.dataset.slide].body=ta.value; saveWork(); } });
+  // imagen: regenerar / editar
+  list.querySelectorAll('[data-regen]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);genSlide(c,c.slides[+b.dataset.slide],$('#model').value);});
+  list.querySelectorAll('[data-edittoggle]').forEach(b=>b.onclick=()=>{const box=b.closest('.slide').querySelector('.slide-edit');box.style.display=box.style.display==='none'?'block':'none';if(box.style.display==='block')box.querySelector('textarea').focus();});
+  list.querySelectorAll('[data-editapply]').forEach(b=>b.onclick=()=>{const c=carousels.find(x=>x.id==b.dataset.car);const sl=c.slides[+b.dataset.slide];const ta=b.parentElement.querySelector('textarea');editSlide(c,sl,$('#model').value,ta.value);b.closest('.slide-edit').style.display='none';});
   persistWork();
 }
 function slideHtml(car,s,i){
-  let inner;
-  if(s.loading) inner=`<div class="mini-spin"></div>`;
-  else if(s.image_url) inner=`<img src="${s.image_url}" loading="lazy" decoding="async"><div class="ov">${esc(s.title)}</div>`;
-  else inner=`<div style="font-size:10px;color:var(--red);padding:8px;text-align:center">${esc(s.error||'sin imagen')}</div>`;
-  return `<div class="slide"><div class="frame"><span class="num">${i+1}</span>${inner}</div>
-    <div class="cap">${esc(s.body||'')}</div>
-    <div style="display:flex;gap:4px;margin-top:5px;">
-      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-regen data-car="${car.id}" data-slide="${i}">↻ Regenerar</button>
-      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-edittoggle>✎ Editar</button>
+  return `<div class="slide" id="sl-${car.id}-${i}">
+    <div class="frame"><span class="num">${i+1}</span>${frameInner(s)}</div>
+    <div class="lbl">Título</div>
+    <textarea class="t-in" data-stitle data-car="${car.id}" data-slide="${i}" rows="2">${esc(s.title||'')}</textarea>
+    <div class="lbl">Texto</div>
+    <textarea class="t-in" data-sbody data-car="${car.id}" data-slide="${i}" rows="4">${esc(s.body||'')}</textarea>
+    <div style="display:flex;gap:4px;margin-top:6px;">
+      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-regen data-car="${car.id}" data-slide="${i}">↻ Imagen</button>
+      <button class="icon-btn" style="flex:1;font-size:9px;padding:4px;" data-edittoggle>✎ Ajustar</button>
     </div>
     <div class="slide-edit" style="display:none;margin-top:5px;">
-      <textarea placeholder="¿Qué cambiar? ej: fondo verde, agrega plantas, más luz" style="width:100%;min-height:44px;font-size:11px;"></textarea>
+      <textarea placeholder="¿Qué cambiar en la imagen? ej: fondo más cálido, agrega plantas, más luz" style="width:100%;min-height:44px;font-size:11px;"></textarea>
       <button class="icon-btn" style="width:100%;font-size:9px;padding:5px;margin-top:4px;" data-editapply data-car="${car.id}" data-slide="${i}">Aplicar cambio</button>
     </div></div>`;
 }
