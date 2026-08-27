@@ -183,6 +183,9 @@ textarea{resize:vertical;min-height:90px;line-height:1.5;}
         <input type="text" id="recNotes" placeholder="Ej: el ranking de alimentos por proteína, formato infografía">
         <label style="margin-top:10px;">Texto de los slides (opcional, pégalo para mayor fidelidad)</label>
         <textarea id="recText" placeholder="Slide 1: ...&#10;Slide 2: ..."></textarea>
+        <label style="margin-top:10px;">Usar uno de MIS carruseles como estilo (opcional)</label>
+        <select id="recRefPick"><option value="">— Sin referencia de estilo —</option></select>
+        <div class="sub" style="margin-top:4px;">Elige un carrusel tuyo: uso sus imágenes como guía de estética Flowback al recrear el del link.</div>
       </div>
       <div class="col">
         <label>Tema (opcional)</label>
@@ -427,7 +430,11 @@ function importRefs(file){
   }catch(err){ toast('No pude importar: '+err.message,'err'); } };
   rd.readAsText(file);
 }
-function refreshPicker(){ const pick=$('#refPick'); if(!pick) return; const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join(''); pick.value=cur; }
+function refreshPicker(){
+  const items=refsData.map(r=>`<option value="${r.id}">${esc((r.notes||('Sin nombre #'+r.id)).slice(0,55))}${r.images&&r.images.length?' 🖼️':''}</option>`).join('');
+  const pick=$('#refPick'); if(pick){ const cur=pick.value; pick.innerHTML='<option value="">— Sin referencia —</option>'+items; pick.value=cur; }
+  const rec=$('#recRefPick'); if(rec){ const cur=rec.value; rec.innerHTML='<option value="">— Sin referencia de estilo —</option>'+items; rec.value=cur; }
+}
 function openRefViewer(ref){ if(!ref) return; $('#refModalTitle').textContent=ref.notes||'Referencia sin nombre'; $('#refModalBody').innerHTML=(ref.images&&ref.images.length)?ref.images.map(u=>`<img src="${esc(u)}" loading="lazy" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block;">`).join(''):'<span class="sub">Esta referencia no tiene imágenes.</span>'; $('#refModal').classList.add('show'); }
 // Render de la lista (sin fetch).
 function renderRefList(){ const box=$('#refList'); if(!box) return;
@@ -480,12 +487,16 @@ $('#refUpload').onchange=async(e)=>{
 $('#recBtn').onclick=async()=>{
   const url=$('#recUrl').value.trim(), notes=$('#recNotes').value.trim(), text=$('#recText').value.trim();
   if(!url&&!notes&&!text){ toast('Pega un link o describe qué te gustó','err'); return; }
+  const styleRef=refsData.find(r=>String(r.id)===$('#recRefPick').value);
   const topic=$('#recTopic').value.trim()||notes||'Idea inspirada en la referencia';
-  const reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
+  let reference=`URL de referencia: ${url}\nQué me gusta: ${notes}\nTexto de los slides:\n${text}`;
+  if(styleRef){ reference+=`\n\nESTILO A USAR (estética de MI carrusel, hazlo bien Flowback): "${styleRef.notes||('#'+styleRef.id)}". Sus imágenes van adjuntas como guía visual.`; }
+  const attachments=styleRef?(styleRef.images||[]):[];
   const slides=+$('#recSlides').value||5, model=$('#model').value, tone=$('#tone').value;
   $('#recBtn').disabled=true; rlog.textContent=''; reclogln('▸ Recreando a tu estilo...');
+  if(styleRef) reclogln('★ estilo de referencia: '+(styleRef.notes||('#'+styleRef.id))+(attachments.length?` (+${attachments.length} img)`:''));
   if(url && !text){ reclogln('  ⚠ Ojo: no puedo abrir el link de Instagram. Para que quede fiel, pega el TEXTO de los slides arriba. Sin eso, lo recreo desde tu descripción/estilo.'); }
-  try{ await buildOne(topic,slides,tone,model,reference,[],reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
+  try{ await buildOne(topic,slides,tone,model,reference,attachments,reclogln); toast('Recreado. Míralo en “Revisar”.','ok'); document.querySelector('.tab[data-page=rev]').click(); }
   catch(e){ reclogln('  ✗ '+e.message); toast('Error: '+e.message,'err'); }
   $('#recBtn').disabled=false;
 };
